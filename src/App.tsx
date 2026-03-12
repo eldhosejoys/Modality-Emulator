@@ -148,6 +148,7 @@ export default function App() {
               </span>
             </div>
             <button
+              type="button"
               onClick={() => setIsSettingsOpen(true)}
               className="p-2 hover:bg-white/10 rounded-lg transition-colors text-text-secondary hover:text-accent-light"
               title="Settings"
@@ -164,6 +165,7 @@ export default function App() {
         {TABS.map((tab) => (
           <button
             key={tab.id}
+            type="button"
             id={`tab-${tab.id}`}
             className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
             onClick={() => setActiveTab(tab.id)}
@@ -222,6 +224,7 @@ export default function App() {
             <h2 className="section-header mb-0">Activity Log</h2>
             {logs.length > 0 && (
               <button 
+                type="button"
                 onClick={clearLogs}
                 className="text-[10px] font-bold uppercase text-text-muted hover:text-danger transition-colors px-1"
                 title="Clear all logs"

@@ -66,6 +66,7 @@ export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus
           <div className="flex gap-3">
             {!emulatorStatus.running ? (
               <button
+                type="button"
                 id="btn-start-emulator"
                 className="btn btn-success px-6 shadow-lg shadow-success/20 hover:shadow-success/40 transition-all"
                 onClick={handleStart}
@@ -75,6 +76,7 @@ export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus
               </button>
             ) : (
               <button
+                type="button"
                 id="btn-stop-emulator"
                 className="btn btn-danger px-6 shadow-lg shadow-danger/20 hover:shadow-danger/40 transition-all"
                 onClick={handleStop}
@@ -111,6 +113,7 @@ export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus
           
           <div className="flex gap-3 mt-auto">
             <button
+              type="button"
               id="btn-ping-ris"
               className="btn btn-outline flex-1 justify-center py-2 h-9 text-[11px] font-bold"
               onClick={() => handleAction('Ping RIS', () => api.pingHost('ris'))}
@@ -119,6 +122,7 @@ export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus
               <FiWifi className="text-accent" /> {busy === 'Ping RIS' ? 'Connecting...' : 'PING HOST'}
             </button>
             <button
+              type="button"
               id="btn-echo-ris"
               className="btn btn-outline flex-1 justify-center py-2 h-9 text-[11px] font-bold"
               onClick={() => handleAction('DICOM Echo (RIS)', () => api.dicomEcho('ris'))}
@@ -152,6 +156,7 @@ export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus
           
           <div className="flex gap-3 mt-auto">
             <button
+              type="button"
               id="btn-ping-pacs"
               className="btn btn-outline flex-1 justify-center py-2 h-9 text-[11px] font-bold"
               onClick={() => handleAction('Ping PACS', () => api.pingHost('pacs'))}
@@ -160,6 +165,7 @@ export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus
               <FiWifi className="text-accent" /> {busy === 'Ping PACS' ? 'Connecting...' : 'PING HOST'}
             </button>
             <button
+              type="button"
               id="btn-echo-pacs"
               className="btn btn-outline flex-1 justify-center py-2 h-9 text-[11px] font-bold"
               onClick={() => handleAction('DICOM Echo (PACS)', () => api.dicomEcho('pacs'))}

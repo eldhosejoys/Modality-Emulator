@@ -263,7 +263,7 @@ export default function WorklistTab({
                 {files.length} available
               </span>
             </div>
-            <button className="btn btn-outline py-1.5 px-3 text-[10px] h-7 gap-1.5 border-border/40 hover:border-accent/40 bg-white/5" onClick={() => fileInput.current?.click()}>
+            <button type="button" className="btn btn-outline py-1.5 px-3 text-[10px] h-7 gap-1.5 border-border/40 hover:border-accent/40 bg-white/5" onClick={() => fileInput.current?.click()}>
               <FiUpload className="text-accent" size={12} /> 
               <span>UPLOAD</span>
             </button>
@@ -283,6 +283,7 @@ export default function WorklistTab({
                   <FiFile className={`flex-shrink-0 transition-colors ${selectedFile === f.name && viewMode === 'local' ? 'text-accent' : 'text-text-muted'}`} size={16} />
                   <span className={`flex-1 truncate transition-all ${selectedFile === f.name && viewMode === 'local' ? 'font-semibold text-text-primary' : 'text-text-secondary group-hover:text-text-primary'}`}>{f.name}</span>
                   <button
+                    type="button"
                     className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-danger transition-all p-1.5 hover:bg-danger/10 rounded-md"
                     onClick={(e) => { e.stopPropagation(); handleDelete(f.name); }}
                     title="Delete"
@@ -306,12 +307,14 @@ export default function WorklistTab({
               {viewMode === 'local' && selectedFile && (
                 <>
                   <button 
+                    type="button"
                     className="text-[10px] uppercase font-bold px-2 py-1 rounded border border-success text-success hover:bg-success hover:text-white transition-all flex items-center gap-1"
                     onClick={() => handleUseAsTemplate(true)}
                   >
                     <FiZap size={10} /> Direct Query
                   </button>
                   <button 
+                    type="button"
                     className="text-[10px] uppercase font-bold px-2 py-1 rounded border border-accent/50 text-text-muted hover:bg-bg-secondary transition-all"
                     onClick={() => handleUseAsTemplate(false)}
                   >
@@ -321,12 +324,14 @@ export default function WorklistTab({
               )}
               <div className="w-[1px] bg-border mx-1" />
               <button 
+                type="button"
                 className={`text-[10px] uppercase font-bold px-3 py-1 rounded border transition-all ${viewMode === 'live' ? 'bg-accent text-white border-accent shadow-sm' : 'border-border text-text-muted hover:text-text-primary'}`}
                 onClick={() => setViewMode('live')}
               >
                 Results
               </button>
               <button 
+                type="button"
                 className={`text-[10px] uppercase font-bold px-3 py-1 rounded border transition-all ${viewMode === 'local' ? 'bg-accent text-white border-accent shadow-sm' : 'border-border text-text-muted hover:text-text-primary'}`}
                 onClick={() => setViewMode('local')}
               >
@@ -334,6 +339,7 @@ export default function WorklistTab({
               </button>
               {queryResults.length > 0 && viewMode === 'live' && (
                 <button 
+                  type="button"
                   className="text-[10px] uppercase font-bold px-2 py-1 text-danger hover:bg-danger/10 rounded transition-all ml-1"
                   onClick={() => setQueryResults([])}
                 >
@@ -369,6 +375,7 @@ export default function WorklistTab({
                               </p>
                               {setActiveTab && (
                                 <button 
+                                  type="button"
                                   className="text-[9px] bg-success/20 text-success hover:bg-success hover:text-white px-2 py-0.5 rounded transition-all flex items-center gap-1"
                                   onClick={(e) => { e.stopPropagation(); setActiveTab('storage'); }}
                                 >

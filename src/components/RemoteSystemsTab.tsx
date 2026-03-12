@@ -108,6 +108,7 @@ export default function RemoteSystemsTab({ settings, onSave, addLog }: Props) {
 
       <div className="flex justify-end">
         <button
+          type="button"
           id="btn-save-remote"
           className="btn btn-success"
           onClick={handleSave}

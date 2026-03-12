@@ -34,6 +34,7 @@ export default function SettingsModal({ isOpen, onClose, settings, onSave, addLo
             <h2 className="text-lg font-semibold text-text-primary">System Settings</h2>
           </div>
           <button 
+            type="button"
             onClick={onClose}
             className="p-2 hover:bg-white/10 rounded-full transition-colors text-text-muted hover:text-text-primary"
           >
@@ -45,6 +46,7 @@ export default function SettingsModal({ isOpen, onClose, settings, onSave, addLo
           {/* Sidebar Tabs */}
           <div className="w-64 border-r border-white/10 bg-black/20 p-4 space-y-2">
             <button
+              type="button"
               onClick={() => setActiveTab('remote')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
                 activeTab === 'remote' 
@@ -56,6 +58,7 @@ export default function SettingsModal({ isOpen, onClose, settings, onSave, addLo
               Remote Systems
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('emulator')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
                 activeTab === 'emulator' 

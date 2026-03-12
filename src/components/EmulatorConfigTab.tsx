@@ -69,6 +69,7 @@ export default function EmulatorConfigTab({ settings, onSave, addLog }: Props) {
 
       <div className="flex justify-end">
         <button
+          type="button"
           id="btn-save-emulator"
           className="btn btn-success"
           onClick={handleSave}

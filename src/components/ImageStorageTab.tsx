@@ -83,53 +83,56 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
   useEffect(() => { loadFiles(); }, []);
 
   const tags = useMemo(() => {
-    if (!selected || originalTags.length === 0) return [];
-    
-    const fileModifications = modifiedFiles[selected] || {};
-    
-    return originalTags.map(t => {
-      if (t.isHeader || t.vr === 'SQ') return { ...t, source: 'original' as const };
+    try {
+      if (!selected || originalTags.length === 0) return [];
       
-      const manualVal = getValueFromPath(fileModifications, t.name);
-      const originalVal = t.value;
+      const fileModifications = modifiedFiles[selected] || {};
       
-      // 1. Check Worklist binding first
-      let worklistVal: string | undefined = undefined;
-      if (selectedWorklist) {
-        const binding: Record<string, any> = {
-          'PatientName': selectedWorklist.PatientName,
-          'PatientID': selectedWorklist.PatientID,
-          'PatientBirthDate': selectedWorklist.PatientBirthDate,
-          'PatientSex': selectedWorklist.PatientSex,
-          'AccessionNumber': selectedWorklist.AccessionNumber,
-          'StudyInstanceUID': selectedWorklist.StudyInstanceUID,
-          'ReferringPhysicianName': selectedWorklist.ReferringPhysicianName,
-          'Modality': selectedWorklist.ScheduledProcedureStepSequence?.[0]?.Modality || selectedWorklist.Modality,
-          'StudyDescription': selectedWorklist.ScheduledProcedureStepSequence?.[0]?.ScheduledProcedureStepDescription || selectedWorklist.StudyDescription,
-        };
+      return originalTags.map(t => {
+        if (t.isHeader || t.vr === 'SQ') return { ...t, source: 'original' as const };
         
-        if (t.name in binding && binding[t.name] !== undefined && binding[t.name] !== null) {
-          worklistVal = formatDicomValue(binding[t.name]);
-        } else if (t.name.match(/PatientName.*Alphabetic/i) && selectedWorklist.PatientName) {
-          worklistVal = formatDicomValue(selectedWorklist.PatientName);
+        const manualVal = getValueFromPath(fileModifications, t.name);
+        const originalVal = t.value || "";
+        
+        let worklistVal: string | undefined = undefined;
+        if (selectedWorklist) {
+          const binding: Record<string, any> = {
+            'PatientName': selectedWorklist.PatientName,
+            'PatientID': selectedWorklist.PatientID,
+            'PatientBirthDate': selectedWorklist.PatientBirthDate,
+            'PatientSex': selectedWorklist.PatientSex,
+            'AccessionNumber': selectedWorklist.AccessionNumber,
+            'StudyInstanceUID': selectedWorklist.StudyInstanceUID,
+            'ReferringPhysicianName': selectedWorklist.ReferringPhysicianName,
+            'Modality': selectedWorklist.ScheduledProcedureStepSequence?.[0]?.Modality || selectedWorklist.Modality,
+            'StudyDescription': selectedWorklist.ScheduledProcedureStepSequence?.[0]?.ScheduledProcedureStepDescription || selectedWorklist.StudyDescription,
+          };
+          
+          if (t.name in binding && binding[t.name] !== undefined && binding[t.name] !== null) {
+            worklistVal = formatDicomValue(binding[t.name]);
+          } else if (t.name.match(/PatientName.*Alphabetic/i) && selectedWorklist.PatientName) {
+            worklistVal = formatDicomValue(selectedWorklist.PatientName);
+          }
         }
-      }
 
-      // 2. Resolve final value and source
-      if (manualVal !== undefined) {
-        const formattedManual = formatDicomValue(manualVal);
-        if (formattedManual === originalVal) {
-           return { ...t, value: originalVal, source: (worklistVal !== undefined ? 'unbound' : 'original') as any };
+        if (manualVal !== undefined) {
+          const formattedManual = formatDicomValue(manualVal);
+          if (formattedManual === originalVal) {
+             return { ...t, value: originalVal, source: (worklistVal !== undefined ? 'unbound' : 'original') as any };
+          }
+          return { ...t, value: formattedManual, source: 'manual' as any };
         }
-        return { ...t, value: formattedManual, source: 'manual' as any };
-      }
-      
-      if (worklistVal !== undefined) {
-        return { ...t, value: worklistVal, source: 'worklist' as any };
-      }
-      
-      return { ...t, value: originalVal, source: 'original' as any };
-    });
+        
+        if (worklistVal !== undefined) {
+          return { ...t, value: worklistVal, source: 'worklist' as any };
+        }
+        
+        return { ...t, value: originalVal, source: 'original' as any };
+      });
+    } catch (e) {
+      console.error("Error computing tags", e);
+      return [];
+    }
   }, [originalTags, modifiedFiles, selected, selectedWorklist]);
 
   const handleSelect = async (name: string) => {
@@ -159,106 +162,118 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
     const tag = tags[index];
     
     setModifiedFiles(prev => {
-      const next = JSON.parse(JSON.stringify(prev));
-      if (!next[selected]) next[selected] = {};
-      
-      const pathParts = tag.name.split(' > ');
-      let current = next[selected];
-      
-      for (let i = 0; i < pathParts.length; i++) {
-        const part = pathParts[i];
-        const arrayMatch = part.match(/(.+) \[(\d+)\]/);
+      try {
+        const next = JSON.parse(JSON.stringify(prev));
+        if (!next[selected]) next[selected] = {};
         
-        if (arrayMatch) {
-          const key = arrayMatch[1];
-          const idx = parseInt(arrayMatch[2]);
-          if (i === pathParts.length - 1) {
-            if (!current[key]) current[key] = [];
-            current[key][idx] = editValue;
+        const pathParts = tag.name.split(' > ');
+        let current = next[selected];
+        
+        for (let i = 0; i < pathParts.length; i++) {
+          const part = pathParts[i];
+          const arrayMatch = part.match(/(.+) \[(\d+)\]/);
+          
+          if (arrayMatch) {
+            const key = arrayMatch[1];
+            const idx = parseInt(arrayMatch[2]);
+            if (i === pathParts.length - 1) {
+              if (!current[key]) current[key] = [];
+              current[key][idx] = editValue;
+            } else {
+              if (!current[key]) current[key] = [];
+              if (!current[key][idx] || typeof current[key][idx] !== 'object') current[key][idx] = {};
+              current = current[key][idx];
+            }
           } else {
-            if (!current[key]) current[key] = [];
-            if (!current[key][idx]) current[key][idx] = {};
-            current = current[key][idx];
-          }
-        } else {
-          if (i === pathParts.length - 1) {
-            current[part] = editValue;
-          } else {
-            if (!current[part]) current[part] = {};
-            current = current[part];
+            if (i === pathParts.length - 1) {
+              current[part] = editValue;
+            } else {
+              if (!current[part] || typeof current[part] !== 'object') current[part] = {};
+              current = current[part];
+            }
           }
         }
+        return next;
+      } catch (e) {
+        console.error("Failed to update modified files", e);
+        return prev;
       }
-      return next;
     });
     
     setEditingIndex(null);
   };
 
   const handleResetTag = (index: number) => {
-    if (!selected || !currentJson) return;
-    const tag = tags[index];
-    const pathParts = tag.name.split(' > ');
+    try {
+      if (!selected || !currentJson || !tags[index]) return;
+      const tag = tags[index];
+      const pathParts = tag.name.split(' > ');
 
-    setModifiedFiles(prev => {
-      const next = JSON.parse(JSON.stringify(prev));
-      if (!next[selected]) next[selected] = {};
-      let current = next[selected];
+      setModifiedFiles(prev => {
+        try {
+          const next = JSON.parse(JSON.stringify(prev));
+          if (!next[selected]) next[selected] = {};
+          let current = next[selected];
 
-      if (tag.source === 'manual' || tag.source === 'unbound') {
-        // Remove override
-        for (let i = 0; i < pathParts.length; i++) {
-          const part = pathParts[i];
-          const arrayMatch = part.match(/(.+) \[(\d+)\]/);
-          if (arrayMatch) {
-            const key = arrayMatch[1];
-            const idx = parseInt(arrayMatch[2]);
-            if (i === pathParts.length - 1) {
-              if (current[key]) delete current[key][idx];
-            } else {
-              if (!current[key] || !current[key][idx]) break;
-              current = current[key][idx];
+          if (tag.source === 'manual' || tag.source === 'unbound') {
+            for (let i = 0; i < pathParts.length; i++) {
+              const part = pathParts[i];
+              const arrayMatch = part.match(/(.+) \[(\d+)\]/);
+              if (arrayMatch) {
+                const key = arrayMatch[1];
+                const idx = parseInt(arrayMatch[2]);
+                if (i === pathParts.length - 1) {
+                  if (current && current[key]) delete current[key][idx];
+                } else {
+                  if (!current || !current[key] || !current[key][idx]) break;
+                  current = current[key][idx];
+                }
+              } else {
+                if (i === pathParts.length - 1) {
+                  if (current) delete current[part];
+                } else {
+                  if (!current || !current[part]) break;
+                  current = current[part];
+                }
+              }
             }
-          } else {
-            if (i === pathParts.length - 1) {
-              delete current[part];
-            } else {
-              if (!current[part]) break;
-              current = current[part];
+          } else if (tag.source === 'worklist') {
+            const originalValue = getValueFromPath(currentJson, tag.name);
+            const valToSet = originalValue === undefined ? "" : formatDicomValue(originalValue);
+            
+            for (let i = 0; i < pathParts.length; i++) {
+              const part = pathParts[i];
+              const arrayMatch = part.match(/(.+) \[(\d+)\]/);
+              if (arrayMatch) {
+                const key = arrayMatch[1];
+                const idx = parseInt(arrayMatch[2]);
+                if (i === pathParts.length - 1) {
+                  if (!current[key]) current[key] = [];
+                  current[key][idx] = valToSet;
+                } else {
+                  if (!current[key]) current[key] = [];
+                  if (!current[key][idx] || typeof current[key][idx] !== 'object') current[key][idx] = {};
+                  current = current[key][idx];
+                }
+              } else {
+                if (i === pathParts.length - 1) {
+                  current[part] = valToSet;
+                } else {
+                  if (!current[part] || typeof current[part] !== 'object') current[part] = {};
+                  current = current[part];
+                }
+              }
             }
           }
+          return next;
+        } catch (e) {
+          console.error("Reset inner failed", e);
+          return prev;
         }
-      } else if (tag.source === 'worklist') {
-        // Add override matching original
-        const originalValue = getValueFromPath(currentJson, tag.name);
-        const valToSet = originalValue === undefined ? "" : formatDicomValue(originalValue);
-        
-        for (let i = 0; i < pathParts.length; i++) {
-          const part = pathParts[i];
-          const arrayMatch = part.match(/(.+) \[(\d+)\]/);
-          if (arrayMatch) {
-            const key = arrayMatch[1];
-            const idx = parseInt(arrayMatch[2]);
-            if (i === pathParts.length - 1) {
-              if (!current[key]) current[key] = [];
-              current[key][idx] = valToSet;
-            } else {
-              if (!current[key]) current[key] = [];
-              if (!current[key][idx]) current[key][idx] = {};
-              current = current[key][idx];
-            }
-          } else {
-            if (i === pathParts.length - 1) {
-              current[part] = valToSet;
-            } else {
-              if (!current[part]) current[part] = {};
-              current = current[part];
-            }
-          }
-        }
-      }
-      return next;
-    });
+      });
+    } catch (err) {
+      console.error("Reset outer failed", err);
+    }
   };
 
   const handleResetAll = () => {
