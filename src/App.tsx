@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FiRadio } from 'react-icons/fi';
+import { FiRadio, FiTrash2 } from 'react-icons/fi';
 import ControlTab from './components/ControlTab';
 import RemoteSystemsTab from './components/RemoteSystemsTab';
 import EmulatorConfigTab from './components/EmulatorConfigTab';
@@ -46,6 +46,14 @@ export default function App() {
       ...prev,
     ].slice(0, 200));
   }, []);
+
+  const clearLogs = () => {
+    setLogs([]);
+  };
+
+  const deleteLog = (id: number) => {
+    setLogs((prev) => prev.filter((log) => log.id !== id));
+  };
 
   useEffect(() => {
     Promise.all([api.getSettings(), api.getEmulatorStatus()])
@@ -157,11 +165,20 @@ export default function App() {
         {/* Activity Log sidebar */}
         <aside className="w-80 flex-shrink-0 border-l border-border flex flex-col"
           style={{ background: 'rgba(10,14,26,0.6)' }}>
-          <div className="px-4 py-3 border-b border-border">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <h2 className="section-header mb-0">Activity Log</h2>
+            {logs.length > 0 && (
+              <button 
+                onClick={clearLogs}
+                className="text-[10px] font-bold uppercase text-text-muted hover:text-danger transition-colors px-1"
+                title="Clear all logs"
+              >
+                Clear All
+              </button>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto p-2">
-            <ActivityLog logs={logs} />
+            <ActivityLog logs={logs} onDelete={deleteLog} />
           </div>
         </aside>
       </div>

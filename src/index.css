@@ -102,6 +102,17 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
   font-family: var(--font-sans);
+  user-select: none;
+}
+
+/* Global clickable styles */
+button, 
+[role="button"],
+.cursor-pointer,
+.tab-btn,
+.file-item {
+  cursor: pointer !important;
+  user-select: none;
 }
 .btn:disabled {
   opacity: 0.4;

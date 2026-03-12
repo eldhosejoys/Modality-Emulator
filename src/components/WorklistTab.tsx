@@ -290,6 +290,14 @@ export default function WorklistTab({ addLog, selectedWorklist, onSelectWorklist
               >
                 Inspector
               </button>
+              {queryResults.length > 0 && viewMode === 'live' && (
+                <button 
+                  className="text-[10px] uppercase font-bold px-2 py-1 text-danger hover:bg-danger/10 rounded transition-all ml-1"
+                  onClick={() => setQueryResults([])}
+                >
+                  Clear
+                </button>
+              )}
             </div>
           </div>
           
