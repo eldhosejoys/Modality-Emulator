@@ -89,7 +89,7 @@ export default function ImageStorageTab({ addLog }: Props) {
     addLog(`Storing ${filenames.length} image(s) to PACS...`, 'info');
     try {
       const result = await api.storeImages(filenames);
-      addLog(`Store Image: ${result.message}`, 'success');
+      addLog(`Store Image: ${result.message}`, result.success ? 'success' : 'error');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       addLog(`Store Image failed: ${msg}`, 'error');

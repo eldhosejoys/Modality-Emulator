@@ -30,8 +30,8 @@ desktop.ini
 *.swo
 *~
 
-# Server uploads/data (if generated)
-server/data/uploads/
+# Server uploads/
+server/data/
 
 # TypeScript cache
 *.tsbuildinfo

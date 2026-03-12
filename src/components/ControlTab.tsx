@@ -18,8 +18,10 @@ export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus
     addLog(`${actionName}...`, 'info');
     try {
       const result = await fn();
-      const msg = (result as { message?: string })?.message || 'Done';
-      addLog(`${actionName}: ${msg}`, 'success');
+      const res = result as { success?: boolean; message?: string };
+      const success = res.success !== false;
+      const msg = res.message || 'Done';
+      addLog(`${actionName}: ${msg}`, success ? 'success' : 'error');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       addLog(`${actionName} failed: ${msg}`, 'error');

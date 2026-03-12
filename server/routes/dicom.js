@@ -71,9 +71,8 @@ async function performEcho(host, port, callingAeTitle, calledAeTitle) {
 }
 
 // Helper: C-FIND SCU (Modality Worklist)
-async function performWorklistQuery(host, port, callingAeTitle, calledAeTitle) {
+async function performWorklistQuery(host, port, callingAeTitle, calledAeTitle, query = {}) {
   const dimseModule = await import('dcmjs-dimse');
-  const dcmjs = await import('dcmjs');
   const dimse = dimseModule.default;
   const { Client } = dimse;
   const { CFindRequest } = dimse.requests;
@@ -81,22 +80,22 @@ async function performWorklistQuery(host, port, callingAeTitle, calledAeTitle) {
   return new Promise((resolve, reject) => {
     const client = new Client();
     
-    // Build a basic worklist query dataset
-    const dataset = new dcmjs.data.DicomMessage();
-    
-    // Use the standard C-FIND for Modality Worklist
-    const request = CFindRequest.createWorklistQuery({
-      PatientName: '*',
-      PatientID: '',
-      AccessionNumber: '',
+    // Build the query dataset based on provided params or defaults
+    const queryParams = {
+      PatientName: query.PatientName || '*',
+      PatientID: query.PatientID || '',
+      AccessionNumber: query.AccessionNumber || '',
       ScheduledProcedureStepSequence: [
         {
-          Modality: '',
-          ScheduledProcedureStepStartDate: '',
-          ScheduledPerformingPhysicianName: '',
+          Modality: query.Modality || '',
+          ScheduledProcedureStepStartDate: query.ScheduledProcedureStepStartDate || '',
+          ScheduledPerformingPhysicianName: query.ScheduledPerformingPhysicianName || '',
         },
       ],
-    });
+      ...query
+    };
+
+    const request = CFindRequest.createWorklistFindRequest(queryParams);
 
     const results = [];
 
@@ -227,7 +226,8 @@ router.post('/worklist', async (req, res) => {
   try {
     const settings = readSettings();
     const ris = settings.ris;
-    const result = await performWorklistQuery(ris.ipAddress, ris.port, settings.emulator.aeTitle, ris.aeTitle);
+    const query = req.body || {};
+    const result = await performWorklistQuery(ris.ipAddress, ris.port, settings.emulator.aeTitle, ris.aeTitle, query);
     res.json(result);
   } catch (err) {
     res.json({ success: false, message: `Worklist query failed: ${err.message}` });

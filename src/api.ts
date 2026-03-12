@@ -61,8 +61,18 @@ export const pingHost = (target: 'ris' | 'pacs') =>
 export const dicomEcho = (target: 'ris' | 'pacs') =>
   request<DicomResult>('/dicom/echo', { method: 'POST', body: JSON.stringify({ target }) });
 
-export const requestWorklist = () =>
-  request<DicomResult>('/dicom/worklist', { method: 'POST' });
+export interface WorklistQuery {
+  PatientName?: string;
+  PatientID?: string;
+  AccessionNumber?: string;
+  Modality?: string;
+  ScheduledProcedureStepStartDate?: string;
+  ScheduledPerformingPhysicianName?: string;
+  [key: string]: any;
+}
+
+export const requestWorklist = (query: WorklistQuery = {}) =>
+  request<DicomResult>('/dicom/worklist', { method: 'POST', body: JSON.stringify(query) });
 
 export const storeImages = (filenames: string[]) =>
   request<DicomResult>('/dicom/store', { method: 'POST', body: JSON.stringify({ filenames }) });
