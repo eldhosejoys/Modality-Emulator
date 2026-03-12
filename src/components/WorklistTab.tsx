@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { FiFile, FiUpload, FiTrash2, FiDatabase, FiList, FiSearch, FiChevronDown, FiChevronUp, FiZap } from 'react-icons/fi';
 import * as api from '../api';
-import type { LogEntry } from '../App';
+import type { LogEntry, TabId } from '../App';
 import WorklistQueryForm from './WorklistQueryForm';
 
 interface Props {
   addLog: (msg: string, type?: LogEntry['type']) => void;
   selectedWorklist: any | null;
   onSelectWorklist: (worklist: any | null) => void;
+  setActiveTab?: (tab: TabId) => void;
   queryResults: any[];
   setQueryResults: (results: any[]) => void;
   viewMode: 'local' | 'live';
@@ -37,7 +38,8 @@ export default function WorklistTab({
   query,
   setQuery,
   formMode,
-  setFormMode
+  setFormMode,
+  setActiveTab
 }: Props) {
   const [files, setFiles] = useState<api.FileInfo[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -366,7 +368,22 @@ export default function WorklistTab({
                       >
                         <div className="text-accent-light mb-1 font-bold border-b border-border pb-1 flex justify-between items-center">
                           <span>Result #{i + 1}</span>
-                          {isSelected && <span className="text-[10px] bg-accent text-white px-2 py-0.5 rounded-full uppercase tracking-wider scale-90 origin-right">Selected</span>}
+                          {isSelected && (
+                            <div className="flex items-center gap-3">
+                              <p className="text-[10px] text-text-muted italic animate-pulse">
+                                Worklist selected! Switch to <span className="text-accent underline cursor-pointer" onClick={(e) => { e.stopPropagation(); setActiveTab?.('storage'); }}>Image Storage</span> to bind and send images.
+                              </p>
+                              {setActiveTab && (
+                                <button 
+                                  className="text-[9px] bg-success/20 text-success hover:bg-success hover:text-white px-2 py-0.5 rounded transition-all flex items-center gap-1"
+                                  onClick={(e) => { e.stopPropagation(); setActiveTab('storage'); }}
+                                >
+                                  <FiZap size={8} /> Bind & Send Images
+                                </button>
+                              )}
+                              <span className="text-[10px] bg-accent text-white px-2 py-0.5 rounded-full uppercase tracking-wider scale-90 origin-right">Selected</span>
+                            </div>
+                          )}
                         </div>
                         {res.string}
                       </div>

@@ -21,7 +21,7 @@ const TABS = [
   { id: 'storage', label: 'Image Storage' },
 ] as const;
 
-type TabId = typeof TABS[number]['id'];
+export type TabId = typeof TABS[number]['id'];
 
 let logIdCounter = 0;
 
@@ -105,6 +105,10 @@ export default function App() {
     }
   };
 
+  const handleSelectWorklist = useCallback((worklist: any | null) => {
+    setSelectedWorklist(worklist);
+  }, []);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -130,6 +134,7 @@ export default function App() {
             <h1 className="text-base font-semibold text-text-primary tracking-tight">Modality Emulator</h1>
             <p className="text-xs text-text-muted">DICOM Modality Testing Tool</p>
           </div>
+
           <div className="ml-auto flex items-center gap-4">
             <div className="flex items-center gap-2 pr-4 border-r border-border">
               <div className={`w-2 h-2 rounded-full ${emulatorStatus.running ? 'bg-success pulse-dot' : 'bg-danger'}`} />
@@ -179,7 +184,8 @@ export default function App() {
             <WorklistTab 
               addLog={addLog} 
               selectedWorklist={selectedWorklist} 
-              onSelectWorklist={setSelectedWorklist} 
+              onSelectWorklist={handleSelectWorklist} 
+              setActiveTab={setActiveTab}
               queryResults={worklistResults}
               setQueryResults={setWorklistResults}
               viewMode={worklistViewMode}
@@ -198,7 +204,8 @@ export default function App() {
             <ImageStorageTab 
               addLog={addLog} 
               selectedWorklist={selectedWorklist} 
-              onSelectWorklist={setSelectedWorklist}
+              onSelectWorklist={handleSelectWorklist}
+              setActiveTab={setActiveTab}
             />
           )}
         </main>
@@ -223,6 +230,7 @@ export default function App() {
           </div>
         </aside>
       </div>
+
       {settings && (
         <SettingsModal 
           isOpen={isSettingsOpen} 

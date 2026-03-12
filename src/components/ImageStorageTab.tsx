@@ -1,15 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { FiFile, FiUpload, FiTrash2, FiUploadCloud, FiCheckSquare, FiSquare } from 'react-icons/fi';
 import * as api from '../api';
-import type { LogEntry } from '../App';
+import type { LogEntry, TabId } from '../App';
 
 interface Props {
   addLog: (msg: string, type?: LogEntry['type']) => void;
   selectedWorklist: any | null;
   onSelectWorklist: (worklist: any | null) => void;
+  setActiveTab?: (tab: TabId) => void;
 }
 
-export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWorklist }: Props) {
+export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWorklist, setActiveTab }: Props) {
   const [files, setFiles] = useState<api.FileInfo[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -115,7 +116,7 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
   return (
     <div className="flex flex-col h-full gap-4">
       {/* Selected Worklist Info (if any) */}
-      {selectedWorklist && (
+      {selectedWorklist ? (
         <div className="glass-card p-3 border-l-4 border-accent bg-accent/5 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-300">
           <div className="flex items-center gap-4">
             <div className="flex flex-col">
@@ -140,6 +141,21 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
           >
             Clear Binding
           </button>
+        </div>
+      ) : (
+        <div className="glass-card p-3 border-l-4 border-yellow-500/30 bg-yellow-500/5 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-text-secondary">
+            <span className="text-yellow-500">⚠️</span>
+            <p className="text-xs">No worklist item selected. Images will be stored without patient data binding.</p>
+          </div>
+          {setActiveTab && (
+            <button 
+              className="text-[10px] uppercase font-bold text-accent hover:text-accent-light px-2"
+              onClick={() => setActiveTab('worklist')}
+            >
+              Select Worklist
+            </button>
+          )}
         </div>
       )}
 
