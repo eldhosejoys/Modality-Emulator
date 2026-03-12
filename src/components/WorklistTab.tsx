@@ -42,7 +42,10 @@ export default function WorklistTab({
   const [files, setFiles] = useState<api.FileInfo[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [tags, setTags] = useState<api.DicomTag[]>([]);
+  const [currentJson, setCurrentJson] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState("");
   
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -61,14 +64,20 @@ export default function WorklistTab({
   const handleSelectFile = async (name: string) => {
     setSelectedFile(name);
     setLoading(true);
+    setEditingIndex(null);
     try {
-      const parsed = await api.parseFile('worklist', name);
+      const [parsed, json] = await Promise.all([
+        api.parseFile('worklist', name),
+        api.getFileJson('worklist', name)
+      ]);
       setTags(parsed);
+      setCurrentJson(json);
       setViewMode('local');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       addLog(`Failed to parse ${name}: ${msg}`, 'error');
       setTags([]);
+      setCurrentJson(null);
     } finally {
       setLoading(false);
     }
@@ -91,7 +100,7 @@ export default function WorklistTab({
     try {
       await api.deleteFile('worklist', name);
       addLog(`Deleted ${name}`, 'success');
-      if (selectedFile === name) { setSelectedFile(null); setTags([]); }
+      if (selectedFile === name) { setSelectedFile(null); setTags([]); setCurrentJson(null); }
       loadFiles();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -104,21 +113,22 @@ export default function WorklistTab({
     
     setLoading(true);
     try {
-      const rawData = await api.getFileJson('worklist', selectedFile);
+      // Use currentJson if available, otherwise fetch
+      const rawData = currentJson || await api.getFileJson('worklist', selectedFile);
       
       const sanitizedSequence = Array.isArray(rawData.ScheduledProcedureStepSequence)
         ? rawData.ScheduledProcedureStepSequence.map((step: any) => ({
             ...step,
-            ScheduledProcedureStepStartDate: '',
-            ScheduledProcedureStepStartTime: '',
-            ScheduledProcedureStepEndDate: '',
-            ScheduledProcedureStepEndTime: '',
+            ScheduledProcedureStepStartDate: step.ScheduledProcedureStepStartDate || '',
+            ScheduledProcedureStepStartTime: step.ScheduledProcedureStepStartTime || '',
+            ScheduledProcedureStepEndDate: step.ScheduledProcedureStepEndDate || '',
+            ScheduledProcedureStepEndTime: step.ScheduledProcedureStepEndTime || '',
           }))
         : rawData.ScheduledProcedureStepSequence;
 
       const queryPayload: api.WorklistQuery = {
         ...rawData,
-        ScheduledProcedureStepStartDate: '',
+        ScheduledProcedureStepStartDate: rawData.ScheduledProcedureStepStartDate || '',
         ScheduledPerformingPhysicianName: rawData.ScheduledPerformingPhysicianName || '',
         ...(sanitizedSequence !== undefined ? { ScheduledProcedureStepSequence: sanitizedSequence } : {}),
       };
@@ -126,11 +136,11 @@ export default function WorklistTab({
       setExternalQuery(queryPayload);
       
       if (autoQuery) {
-        addLog('Executing direct query from ' + selectedFile, 'info');
+        addLog('Executing direct query from ' + (currentJson ? 'edited session data' : selectedFile), 'info');
         handleLiveQuery(queryPayload);
       } else {
         setViewMode('live');
-        addLog('Loaded actual data from template: ' + selectedFile, 'success');
+        addLog('Loaded actual data from ' + (currentJson ? 'edited ' : '') + 'template: ' + selectedFile, 'success');
         setPanelStates(prev => ({ ...prev, query: true }));
       }
     } catch (err: unknown) {
@@ -139,6 +149,47 @@ export default function WorklistTab({
     } finally {
       if (!autoQuery) setLoading(false);
     }
+  };
+
+  const handleUpdateTag = (index: number) => {
+    if (editingIndex === null) return;
+    
+    const tag = tags[index];
+    const newTags = [...tags];
+    newTags[index] = { ...tag, value: editValue };
+    setTags(newTags);
+    
+    // Update currentJson by parsing the "name" as path
+    if (currentJson) {
+      const updatedJson = { ...currentJson };
+      const pathParts = tag.name.split(' > ');
+      let current = updatedJson;
+      
+      for (let i = 0; i < pathParts.length; i++) {
+        const part = pathParts[i];
+        const arrayMatch = part.match(/(.+) \[(\d+)\]/);
+        
+        if (arrayMatch) {
+          const key = arrayMatch[1];
+          const idx = parseInt(arrayMatch[2]);
+          if (i === pathParts.length - 1) {
+            current[key][idx] = editValue;
+          } else {
+            current = current[key][idx];
+          }
+        } else {
+          if (i === pathParts.length - 1) {
+            current[part] = editValue;
+          } else {
+            if (!current[part]) current[part] = {};
+            current = current[part];
+          }
+        }
+      }
+      setCurrentJson(updatedJson);
+    }
+    
+    setEditingIndex(null);
   };
   const handleLiveQuery = async (query: api.WorklistQuery) => {
     setLoading(true);
@@ -361,7 +412,31 @@ export default function WorklistTab({
                           </td>
                           <td className="text-[10px] text-center font-mono opacity-60">{t.vr}</td>
                           <td className={`max-w-md truncate ${t.isHeader ? 'italic text-text-muted text-[10px]' : ''}`} title={t.value}>
-                            {t.value}
+                            {!t.isHeader && (t.vr !== 'SQ') ? (
+                              editingIndex === i ? (
+                                <input
+                                  autoFocus
+                                  className="bg-bg-input border border-accent rounded px-1 w-full text-text-primary outline-none focus:ring-1 ring-accent/50"
+                                  value={editValue}
+                                  onChange={(e) => setEditValue(e.target.value)}
+                                  onBlur={() => handleUpdateTag(i)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleUpdateTag(i);
+                                    if (e.key === 'Escape') setEditingIndex(null);
+                                  }}
+                                />
+                              ) : (
+                                <div 
+                                  className="cursor-text hover:bg-accent/10 min-h-[1.2rem] px-1 rounded transition-colors group/edit relative"
+                                  onClick={() => { setEditingIndex(i); setEditValue(t.value); }}
+                                >
+                                  {t.value || <span className="text-text-muted/30 italic">empty</span>}
+                                  <span className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/edit:opacity-30 text-[9px] uppercase font-bold text-accent">edit</span>
+                                </div>
+                              )
+                            ) : (
+                              t.value
+                            )}
                           </td>
                         </tr>
                       ))}
