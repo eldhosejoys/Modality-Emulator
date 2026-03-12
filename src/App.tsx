@@ -5,6 +5,7 @@ import WorklistTab from './components/WorklistTab';
 import ImageStorageTab from './components/ImageStorageTab';
 import ActivityLog from './components/ActivityLog';
 import SettingsModal from './components/SettingsModal';
+import { ToastContainer, ToastMessage } from './components/Toast';
 import * as api from './api';
 
 export interface LogEntry {
@@ -30,6 +31,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [emulatorStatus, setEmulatorStatus] = useState<api.EmulatorStatus>({ running: false });
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedWorklist, setSelectedWorklist] = useState<any | null>(null);
   const [worklistResults, setWorklistResults] = useState<any[]>([]);
@@ -50,16 +52,26 @@ export default function App() {
   });
 
   const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
+    const id = ++logIdCounter;
     setLogs((prev) => [
       {
-        id: ++logIdCounter,
+        id,
         timestamp: new Date().toLocaleTimeString(),
         message,
         type,
       },
       ...prev,
     ].slice(0, 200));
+
+    // Also add to toasts - only for success/error, latest first, max 3
+    if (type !== 'info') {
+      setToasts((prev) => [{ id, message, type }, ...prev].slice(0, 3));
+    }
   }, []);
+
+  const removeToast = (id: number) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
 
   const clearLogs = () => {
     setLogs([]);
@@ -220,6 +232,7 @@ export default function App() {
           addLog={addLog}
         />
       )}
+      <ToastContainer toasts={toasts} onClose={removeToast} />
     </div>
   );
 }
