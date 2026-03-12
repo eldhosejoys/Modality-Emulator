@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { FiFile, FiUpload, FiTrash2, FiDatabase, FiList, FiSearch, FiChevronDown, FiChevronUp, FiZap, FiCheckSquare } from 'react-icons/fi';
+import { FiFile, FiUpload, FiTrash2, FiDatabase, FiList, FiSearch, FiChevronDown, FiChevronUp, FiZap } from 'react-icons/fi';
 import * as api from '../api';
 import type { LogEntry } from '../App';
 import WorklistQueryForm from './WorklistQueryForm';
@@ -140,22 +140,6 @@ export default function WorklistTab({
       if (!autoQuery) setLoading(false);
     }
   };
-
-  const handleBindLocalTemplate = async () => {
-    if (!selectedFile) return;
-    setLoading(true);
-    try {
-      const rawData = await api.getFileJson('worklist', selectedFile);
-      onSelectWorklist(rawData);
-      addLog(`Bound local template ${selectedFile} as active worklist`, 'success');
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      addLog(`Failed to bind template: ${msg}`, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleLiveQuery = async (query: api.WorklistQuery) => {
     setLoading(true);
     setQueryResults([]);
@@ -279,12 +263,6 @@ export default function WorklistTab({
                     onClick={() => handleUseAsTemplate(true)}
                   >
                     <FiZap size={10} /> Direct Query
-                  </button>
-                  <button 
-                    className="text-[10px] uppercase font-bold px-2 py-1 rounded border border-accent text-accent hover:bg-accent hover:text-white transition-all flex items-center gap-1"
-                    onClick={handleBindLocalTemplate}
-                  >
-                    <FiCheckSquare size={10} /> Bind this Template
                   </button>
                   <button 
                     className="text-[10px] uppercase font-bold px-2 py-1 rounded border border-accent/50 text-text-muted hover:bg-bg-secondary transition-all"
