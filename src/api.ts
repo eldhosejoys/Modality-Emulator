@@ -74,8 +74,8 @@ export interface WorklistQuery {
 export const requestWorklist = (query: WorklistQuery = {}) =>
   request<DicomResult>('/dicom/worklist', { method: 'POST', body: JSON.stringify(query) });
 
-export const storeImages = (filenames: string[]) =>
-  request<DicomResult>('/dicom/store', { method: 'POST', body: JSON.stringify({ filenames }) });
+export const storeImages = (filenames: string[], worklistData?: any) =>
+  request<DicomResult>('/dicom/store', { method: 'POST', body: JSON.stringify({ filenames, worklistData }) });
 
 // ─── Files ──────────────────────────────────
 export interface FileInfo {

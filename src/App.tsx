@@ -33,6 +33,7 @@ export default function App() {
   const [emulatorStatus, setEmulatorStatus] = useState<api.EmulatorStatus>({ running: false });
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedWorklist, setSelectedWorklist] = useState<any | null>(null);
 
   const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
     setLogs((prev) => [
@@ -137,8 +138,20 @@ export default function App() {
           {activeTab === 'emulator' && settings && (
             <EmulatorConfigTab settings={settings} onSave={handleSaveSettings} addLog={addLog} />
           )}
-          {activeTab === 'worklist' && <WorklistTab addLog={addLog} />}
-          {activeTab === 'storage' && <ImageStorageTab addLog={addLog} />}
+          {activeTab === 'worklist' && (
+            <WorklistTab 
+              addLog={addLog} 
+              selectedWorklist={selectedWorklist} 
+              onSelectWorklist={setSelectedWorklist} 
+            />
+          )}
+          {activeTab === 'storage' && (
+            <ImageStorageTab 
+              addLog={addLog} 
+              selectedWorklist={selectedWorklist} 
+              onSelectWorklist={setSelectedWorklist}
+            />
+          )}
         </main>
 
         {/* Activity Log sidebar */}

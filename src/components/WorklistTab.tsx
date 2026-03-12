@@ -1,14 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
-import { FiFile, FiUpload, FiTrash2, FiDatabase, FiList, FiSearch, FiChevronDown, FiChevronUp, FiZap } from 'react-icons/fi';
+import { FiFile, FiUpload, FiTrash2, FiDatabase, FiList, FiSearch, FiChevronDown, FiChevronUp, FiZap, FiCheckSquare } from 'react-icons/fi';
 import * as api from '../api';
 import type { LogEntry } from '../App';
 import WorklistQueryForm from './WorklistQueryForm';
 
 interface Props {
   addLog: (msg: string, type?: LogEntry['type']) => void;
+  selectedWorklist: any | null;
+  onSelectWorklist: (worklist: any | null) => void;
 }
 
-export default function WorklistTab({ addLog }: Props) {
+export default function WorklistTab({ addLog, selectedWorklist, onSelectWorklist }: Props) {
   const [files, setFiles] = useState<api.FileInfo[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [tags, setTags] = useState<api.DicomTag[]>([]);
@@ -123,6 +125,21 @@ export default function WorklistTab({ addLog }: Props) {
       addLog(`Failed to load template data: ${msg}`, 'error');
     } finally {
       if (!autoQuery) setLoading(false);
+    }
+  };
+
+  const handleBindLocalTemplate = async () => {
+    if (!selectedFile) return;
+    setLoading(true);
+    try {
+      const rawData = await api.getFileJson('worklist', selectedFile);
+      onSelectWorklist(rawData);
+      addLog(`Bound local template ${selectedFile} as active worklist`, 'success');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      addLog(`Failed to bind template: ${msg}`, 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -247,10 +264,16 @@ export default function WorklistTab({ addLog }: Props) {
                     <FiZap size={10} /> Direct Query
                   </button>
                   <button 
-                    className="text-[10px] uppercase font-bold px-2 py-1 rounded border border-accent/50 text-accent hover:bg-accent hover:text-white transition-all"
+                    className="text-[10px] uppercase font-bold px-2 py-1 rounded border border-accent text-accent hover:bg-accent hover:text-white transition-all flex items-center gap-1"
+                    onClick={handleBindLocalTemplate}
+                  >
+                    <FiCheckSquare size={10} /> Bind this Template
+                  </button>
+                  <button 
+                    className="text-[10px] uppercase font-bold px-2 py-1 rounded border border-accent/50 text-text-muted hover:bg-bg-secondary transition-all"
                     onClick={() => handleUseAsTemplate(false)}
                   >
-                    Copy to Form
+                    To Form
                   </button>
                 </>
               )}
@@ -279,14 +302,22 @@ export default function WorklistTab({ addLog }: Props) {
             ) : viewMode === 'live' ? (
               queryResults.length > 0 ? (
                 <div className="p-4 space-y-3">
-                  {queryResults.map((res, i) => (
-                    <div key={i} className="bg-bg-input rounded-lg border border-border p-3 font-mono text-xs whitespace-pre-wrap overflow-x-auto text-text-secondary group hover:border-accent/40 transition-colors shadow-sm">
-                      <div className="text-accent-light mb-1 font-bold border-b border-border pb-1 flex justify-between">
-                        <span>Result #{i + 1}</span>
+                  {queryResults.map((res, i) => {
+                    const isSelected = selectedWorklist && JSON.stringify(selectedWorklist) === JSON.stringify(res.json);
+                    return (
+                      <div 
+                        key={i} 
+                        className={`bg-bg-input rounded-lg border p-3 font-mono text-xs whitespace-pre-wrap overflow-x-auto text-text-secondary group transition-all duration-200 shadow-sm cursor-pointer relative ${isSelected ? 'border-accent ring-1 ring-accent/30 bg-accent/5' : 'border-border hover:border-accent/40'}`}
+                        onClick={() => onSelectWorklist(isSelected ? null : res.json)}
+                      >
+                        <div className="text-accent-light mb-1 font-bold border-b border-border pb-1 flex justify-between items-center">
+                          <span>Result #{i + 1}</span>
+                          {isSelected && <span className="text-[10px] bg-accent text-white px-2 py-0.5 rounded-full uppercase tracking-wider scale-90 origin-right">Selected</span>}
+                        </div>
+                        {res.string}
                       </div>
-                      {res}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center p-6 text-text-muted">

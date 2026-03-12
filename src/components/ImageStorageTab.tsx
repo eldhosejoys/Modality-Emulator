@@ -5,9 +5,11 @@ import type { LogEntry } from '../App';
 
 interface Props {
   addLog: (msg: string, type?: LogEntry['type']) => void;
+  selectedWorklist: any | null;
+  onSelectWorklist: (worklist: any | null) => void;
 }
 
-export default function ImageStorageTab({ addLog }: Props) {
+export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWorklist }: Props) {
   const [files, setFiles] = useState<api.FileInfo[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -15,6 +17,18 @@ export default function ImageStorageTab({ addLog }: Props) {
   const [loadingTags, setLoadingTags] = useState(false);
   const [storing, setStoring] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  // Helper to format DICOM values (handles strings vs complex objects like PN)
+  const formatDicomValue = (val: any): string => {
+    if (val === null || val === undefined) return '';
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object') {
+      if (val.Alphabetic) return val.Alphabetic;
+      // Fallback for other potential objects or arrays
+      return JSON.stringify(val);
+    }
+    return String(val);
+  };
 
   const loadFiles = async () => {
     try {
@@ -88,7 +102,7 @@ export default function ImageStorageTab({ addLog }: Props) {
     setStoring(true);
     addLog(`Storing ${filenames.length} image(s) to PACS...`, 'info');
     try {
-      const result = await api.storeImages(filenames);
+      const result = await api.storeImages(filenames, selectedWorklist);
       addLog(`Store Image: ${result.message}`, result.success ? 'success' : 'error');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -99,7 +113,37 @@ export default function ImageStorageTab({ addLog }: Props) {
   };
 
   return (
-    <div className="flex gap-4 h-full">
+    <div className="flex flex-col h-full gap-4">
+      {/* Selected Worklist Info (if any) */}
+      {selectedWorklist && (
+        <div className="glass-card p-3 border-l-4 border-accent bg-accent/5 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col">
+              <span className="text-[10px] uppercase font-bold text-accent tracking-wider">Active Binding</span>
+              <span className="text-sm font-semibold text-text-primary">
+                {formatDicomValue(selectedWorklist.PatientName) || 'Anonymous'} ({formatDicomValue(selectedWorklist.PatientID) || 'No ID'})
+              </span>
+            </div>
+            <div className="h-8 w-[1px] bg-border mx-1" />
+            <div className="flex flex-col">
+              <span className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Accession</span>
+              <span className="text-xs font-mono text-text-secondary">{formatDicomValue(selectedWorklist.AccessionNumber) || 'N/A'}</span>
+            </div>
+            <div className="flex flex-col ml-2">
+              <span className="text-[10px] uppercase font-bold text-text-muted tracking-wider">Procedure</span>
+              <span className="text-xs text-text-secondary truncate max-w-xs">{formatDicomValue(selectedWorklist.ScheduledProcedureStepSequence?.[0]?.ScheduledProcedureStepDescription) || 'No description'}</span>
+            </div>
+          </div>
+          <button 
+            className="btn btn-outline py-1 px-3 text-xs border-danger/30 text-danger hover:bg-danger hover:text-white"
+            onClick={() => onSelectWorklist(null)}
+          >
+            Clear Binding
+          </button>
+        </div>
+      )}
+
+      <div className="flex gap-4 flex-1 min-h-0">
       {/* File list */}
       <div className="w-72 flex-shrink-0 glass-card flex flex-col">
         <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
@@ -191,6 +235,7 @@ export default function ImageStorageTab({ addLog }: Props) {
             <p className="text-sm text-text-muted p-4">Select a file from the list to inspect DICOM tags</p>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

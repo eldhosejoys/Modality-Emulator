@@ -191,9 +191,26 @@ async function performWorklistQuery(host, port, callingAeTitle, calledAeTitle, q
         // Pending - more results coming
         const dataset = response.getDataset();
         if (dataset) {
-          // In MWL, results are datasets. We'll toString() them for display, 
-          // or we could extract specific fields.
-          results.push(dataset.toString());
+          // In MWL, results are datasets. We'll return both a readable string
+          // and the naturalized JSON for better UI handling and binding.
+          const dcmString = dataset.toString();
+          
+          // Basic naturalization of the dataset object for the frontend
+          const rawObj = dataset.getElements();
+          const naturalized = {};
+          
+          // Minimal naturalization: map keywords to values
+          for (const key in rawObj) {
+            // Skip large elements and private tags if needed, but for MWL it's usually small
+            if (rawObj[key] && typeof rawObj[key] !== 'function') {
+              naturalized[key] = rawObj[key];
+            }
+          }
+
+          results.push({
+            string: dcmString,
+            json: naturalized
+          });
         }
       } else if (status === 0x0000) {
         // Success, no more results
@@ -327,10 +344,56 @@ router.post('/worklist', async (req, res) => {
   }
 });
 
+// Helper: Update DICOM tags using dcmjs
+async function updateDicomTags(filePath, worklistData, outputPath) {
+  const dcmjs = await import('dcmjs');
+  const { DicomMessage, DicomMetaDictionary } = dcmjs.data;
+  
+  const buffer = fs.readFileSync(filePath);
+  const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+  
+  let dicomDict;
+  try {
+    dicomDict = DicomMessage.readFile(arrayBuffer);
+  } catch {
+    dicomDict = DicomMessage.readFile(arrayBuffer, { ignoreErrors: true });
+  }
+
+  const dataset = DicomMetaDictionary.naturalizeDataset(dicomDict.dict);
+  
+  // Bind worklist data to image dataset
+  // We prioritize data from the worklist
+  const tagsToBind = {
+    'PatientName': worklistData.PatientName,
+    'PatientID': worklistData.PatientID,
+    'PatientBirthDate': worklistData.PatientBirthDate,
+    'PatientSex': worklistData.PatientSex,
+    'AccessionNumber': worklistData.AccessionNumber,
+    'StudyInstanceUID': worklistData.StudyInstanceUID,
+    'ReferringPhysicianName': worklistData.ReferringPhysicianName,
+    'StudyDescription': worklistData.ScheduledProcedureStepSequence?.[0]?.ScheduledProcedureStepDescription || worklistData.StudyDescription,
+  };
+
+  for (const [key, value] of Object.entries(tagsToBind)) {
+    if (value !== undefined && value !== null) {
+      dataset[key] = value;
+    }
+  }
+
+  // Denaturalize back to DICOM format
+  const denaturalized = DicomMetaDictionary.denaturalizeDataset(dataset);
+  dicomDict.dict = denaturalized;
+  
+  // Write back to a new buffer
+  const newBuffer = Buffer.from(dicomDict.write());
+  fs.writeFileSync(outputPath, newBuffer);
+}
+
 // POST /api/dicom/store
 router.post('/store', async (req, res) => {
+  let tempFiles = [];
   try {
-    const { filenames } = req.body;
+    const { filenames, worklistData } = req.body;
     if (!filenames || !filenames.length) {
       return res.status(400).json({ success: false, message: 'No files specified' });
     }
@@ -338,20 +401,49 @@ router.post('/store', async (req, res) => {
     const settings = readSettings();
     const pacs = settings.pacs;
     const imagesDir = join(__dirname, '..', 'data', 'images');
+    const tmpDir = join(__dirname, '..', 'data', 'tmp');
+    
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
-    const filePaths = filenames.map((name) => join(imagesDir, name));
+    let filePathsToStore = filenames.map((name) => join(imagesDir, name));
+
+    // If worklist data is provided, update images first
+    if (worklistData) {
+      console.log(`  🔄 Binding worklist data to ${filenames.length} image(s) before storage`);
+      const updatedPaths = [];
+      for (const name of filenames) {
+        const srcPath = join(imagesDir, name);
+        if (!fs.existsSync(srcPath)) continue;
+        
+        const tmpPath = join(tmpDir, `bound_${Date.now()}_${name}`);
+        await updateDicomTags(srcPath, worklistData, tmpPath);
+        updatedPaths.push(tmpPath);
+        tempFiles.push(tmpPath);
+      }
+      filePathsToStore = updatedPaths;
+    }
 
     // Verify all files exist
-    for (const fp of filePaths) {
+    for (const fp of filePathsToStore) {
       if (!fs.existsSync(fp)) {
         return res.status(400).json({ success: false, message: `File not found: ${fp}` });
       }
     }
 
-    const result = await performStore(pacs.ipAddress, pacs.port, settings.emulator.aeTitle, pacs.aeTitle, filePaths);
+    const result = await performStore(pacs.ipAddress, pacs.port, settings.emulator.aeTitle, pacs.aeTitle, filePathsToStore);
     res.json(result);
   } catch (err) {
+    console.error('Store error:', err);
     res.json({ success: false, message: `Store failed: ${err.message}` });
+  } finally {
+    // Clean up temp files
+    for (const fp of tempFiles) {
+      try {
+        if (fs.existsSync(fp)) fs.unlinkSync(fp);
+      } catch (e) {
+        console.error(`Failed to delete temp file ${fp}:`, e.message);
+      }
+    }
   }
 });
 
