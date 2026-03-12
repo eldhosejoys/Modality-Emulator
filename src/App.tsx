@@ -68,9 +68,9 @@ export default function App() {
       ...prev,
     ].slice(0, 200));
 
-    // Also add to toasts - only for success/error, latest first, max 3
+    // Also add to toasts - only for success/error, latest first, max 1
     if (type !== 'info') {
-      setToasts((prev) => [{ id, message, type }, ...prev].slice(0, 3));
+      setToasts([{ id, message, type }]);
     }
   }, []);
 
