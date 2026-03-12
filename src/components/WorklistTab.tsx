@@ -83,17 +83,31 @@ export default function WorklistTab({ addLog }: Props) {
     try {
       const rawData = await api.getFileJson('worklist', selectedFile);
       
-      const newQuery: api.WorklistQuery = {};
-      const getVal = (name: string) => rawData[name] || '';
+      // Build a clean query payload suitable for C-FIND universal matching.
+      // The DCM file may contain specific values (e.g. a date like "20060801" inside
+      // ScheduledProcedureStepSequence) that were valid for creating the worklist entry
+      // but act as restrictive filters when used in a C-FIND query, returning 0 results.
+      // We reset date/time fields to "" (universal match) so Orthanc returns all entries.
+      const sanitizedSequence = Array.isArray(rawData.ScheduledProcedureStepSequence)
+        ? rawData.ScheduledProcedureStepSequence.map((step: any) => ({
+            ...step,
+            // Reset date/time fields to universal match ("") inside the sequence
+            ScheduledProcedureStepStartDate: '',
+            ScheduledProcedureStepStartTime: '',
+            ScheduledProcedureStepEndDate: '',
+            ScheduledProcedureStepEndTime: '',
+          }))
+        : rawData.ScheduledProcedureStepSequence;
 
-      newQuery.PatientName = getVal('PatientName');
-      newQuery.PatientID = getVal('PatientID');
-      newQuery.AccessionNumber = getVal('AccessionNumber');
-      newQuery.Modality = getVal('Modality');
-      newQuery.ScheduledProcedureStepStartDate = getVal('ScheduledProcedureStepStartDate');
-      newQuery.ScheduledPerformingPhysicianName = getVal('ScheduledPerformingPhysicianName');
-      
-      const queryPayload = { ...rawData, ...newQuery };
+      const queryPayload: api.WorklistQuery = {
+        ...rawData,
+        // Also reset top-level date fields that may be specific
+        ScheduledProcedureStepStartDate: '',
+        ScheduledPerformingPhysicianName: rawData.ScheduledPerformingPhysicianName || '',
+        // Replace sequence with sanitized version
+        ...(sanitizedSequence !== undefined ? { ScheduledProcedureStepSequence: sanitizedSequence } : {}),
+      };
+
       setExternalQuery(queryPayload);
       
       if (autoQuery) {

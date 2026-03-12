@@ -71,53 +71,114 @@ async function performEcho(host, port, callingAeTitle, calledAeTitle) {
 }
 
 // Helper: C-FIND SCU (Modality Worklist)
+/**
+ * Recursively removes keys with null values from a DICOM query object (including
+ * nested sequences stored as arrays). This is critical because dcmjs-dimse coerces
+ * null to a typed default (e.g., 0 for US fields like PatientPregnancyStatus 0010,21c0),
+ * which Orthanc then treats as a value filter instead of a universal match — causing
+ * 0 results even when the server has matching worklist entries.
+ */
+function stripNulls(obj) {
+  if (Array.isArray(obj)) {
+    return obj.map(stripNulls).filter(it => it !== undefined);
+  }
+  if (obj !== null && typeof obj === 'object') {
+    const result = {};
+    let hasKeys = false;
+    for (const [key, value] of Object.entries(obj)) {
+      if (value === null) continue;
+      const stripped = stripNulls(value);
+      if (stripped !== undefined) {
+        result[key] = stripped;
+        hasKeys = true;
+      }
+    }
+    return hasKeys ? result : undefined;
+  }
+  return obj;
+}
+
 async function performWorklistQuery(host, port, callingAeTitle, calledAeTitle, query = {}) {
   const dimseModule = await import('dcmjs-dimse');
   const dimse = dimseModule.default;
-  const { Client } = dimse;
+  const { Client, Dataset, SopClass } = dimse;
   const { CFindRequest } = dimse.requests;
 
   return new Promise((resolve, reject) => {
     const client = new Client();
-    
-    // Build the query dataset based on provided params or defaults
-    // Note: Empty strings signify universal matching (return these attributes)
-    let queryParams;
-    
-    // If the query looks like a full DICOM JSON (has ScheduledProcedureStepSequence at root), use it as is
-    if (query.ScheduledProcedureStepSequence) {
-      queryParams = { ...query };
-    } else {
-      queryParams = {
-        PatientName: query.PatientName || '',
-        PatientID: query.PatientID || '',
-        AccessionNumber: query.AccessionNumber || '',
-        PatientBirthDate: query.PatientBirthDate || '',
-        PatientSex: query.PatientSex || '',
-        RequestedProcedureID: query.RequestedProcedureID || '',
-        RequestedProcedureDescription: '',
-        StudyInstanceUID: '',
-        ScheduledProcedureStepSequence: [
-          {
-            Modality: query.Modality || '',
-            ScheduledProcedureStepStartDate: query.ScheduledProcedureStepStartDate || '',
-            ScheduledProcedureStepStartTime: '',
-            ScheduledPerformingPhysicianName: query.ScheduledPerformingPhysicianName || '',
-            ScheduledStationAETitle: query.ScheduledStationAETitle || '',
-            ScheduledProcedureStepDescription: '',
-            ScheduledProcedureStepID: '',
-            ScheduledStationName: '',
-          },
-        ],
-        ...query
-      };
-    }
+    const isRawTagQuery = Object.keys(query).some((k) => /^[0-9a-fA-F]{4},[0-9a-fA-F]{4}$/.test(k));
 
     console.log(`  🔍 Sending C-FIND Worklist Request to ${host}:${port} (${calledAeTitle})`);
-    console.log(`  → Query:`, JSON.stringify(queryParams, null, 2));
 
-    const request = CFindRequest.createWorklistFindRequest(queryParams);
+    // Prepare the final query object
+    let finalQuery;
+    if (isRawTagQuery) {
+      // 1. Raw Tag Path: Use exactly what the user provided, minus nulls
+      finalQuery = stripNulls(query) || {};
+    } else {
+      // 2. Named Key Path.
+      if (Object.keys(query).length === 0) {
+        // Minimal template if starting from scratch
+        finalQuery = {
+          PatientName: '',
+          PatientID: '',
+          AccessionNumber: '',
+          ScheduledProcedureStepSequence: [{
+            Modality: '',
+            ScheduledProcedureStepStartDate: '',
+            ScheduledProcedureStepDescription: '',
+            ScheduledProcedureStepID: '',
+          }]
+        };
+      } else {
+        finalQuery = { ...query };
+        // Ensure PatientName/ID are present for UI rows, but only if they weren't explicitly filtered
+        if (finalQuery.PatientName === undefined) finalQuery.PatientName = '';
+        if (finalQuery.PatientID === undefined) finalQuery.PatientID = '';
+      }
+      finalQuery = stripNulls(finalQuery);
+    }
 
+    console.log(`  → Final Query Content:`, JSON.stringify(finalQuery, null, 2));
+
+    // Manual request construction to bypass library templates
+    const request = new CFindRequest();
+    const mwlSopClass = SopClass ? SopClass.ModalityWorklistInformationModelFind : '1.2.840.10008.5.1.4.31';
+    request.setAffectedSopClassUid(mwlSopClass);
+
+    const dataset = new Dataset(finalQuery);
+    
+    /**
+     * ANTI-INTRUSION FILTER:
+     * Dcmjs-dimse often 'helpfully' injects tags like PatientPregnancyStatus (0010,21c0)="0"
+     * into Worklist datasets. Orthanc uses "0" as a filter, breaking matching.
+     * We manually strip any tag found in the final Dataset that WASN'T in finalQuery.
+     */
+    const elements = dataset.getElements();
+    const userKeys = new Set(Object.keys(finalQuery));
+    
+    // Dictionary of tags the library likes to inject
+    const intruders = {
+      'PatientPregnancyStatus': '001021C0',
+      'PatientBirthDate': '00100030',
+      'PatientSex': '00100040',
+      'MedicalAlerts': '00102000',
+      'ContrastAllergies': '00102110',
+      'SmokingStatus': '001021A0'
+    };
+
+    for (const [name, tagCode] of Object.entries(intruders)) {
+      // If the user didn't ask for this tag (by name or by comma-hex), delete it from output
+      const userAskedByName = userKeys.has(name);
+      const userAskedByTag = userKeys.has(tagCode) || userKeys.has(`${tagCode.substring(0,4)},${tagCode.substring(4)}`);
+      
+      if (!userAskedByName && !userAskedByTag) {
+        if (elements[name] !== undefined) delete elements[name];
+        if (elements[tagCode] !== undefined) delete elements[tagCode];
+      }
+    }
+
+    request.setDataset(dataset);
     const results = [];
 
     client.on('associationAccepted', () => {
