@@ -187,7 +187,7 @@ export default function WorklistTab({
           <div className="p-5">
             <WorklistQueryForm 
               onQuery={handleLiveQuery} 
-              onClear={() => setQueryResults([])}
+              onClear={() => { setQueryResults([]); setExternalQuery(null); }}
               isLoading={loading && viewMode === 'live'} 
               externalQuery={externalQuery}
               query={query}
