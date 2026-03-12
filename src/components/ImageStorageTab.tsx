@@ -21,6 +21,7 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
   const [editValue, setEditValue] = useState("");
   const [currentJson, setCurrentJson] = useState<any>(null);
   const [modifiedFiles, setModifiedFiles] = useState<Record<string, any>>({});
+  const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -206,14 +207,42 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
     addLog('Reset all local DICOM modifications', 'info');
   };
 
-  const toggleCheck = (name: string, e: React.MouseEvent) => {
+  const toggleCheck = (name: string, index: number, e: React.MouseEvent) => {
     e.stopPropagation();
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
+    
+    // Select for tags anyway when toggling check
+    handleSelect(name);
+
+    if (e.shiftKey && lastClickedIndex !== null) {
+      const start = Math.min(lastClickedIndex, index);
+      const end = Math.max(lastClickedIndex, index);
+      const namesInRange = files.slice(start, end + 1).map(f => f.name);
+      
+      setChecked(prev => {
+        const next = new Set(prev);
+        // If we are shift-clicking, we usually want to make sure all are checked
+        // unless the first one clicked in this range was checked, then maybe toggle?
+        // Standard behavior: check all in range.
+        namesInRange.forEach(n => next.add(n));
+        return next;
+      });
+    } else {
+      setChecked((prev) => {
+        const next = new Set(prev);
+        if (next.has(name)) next.delete(name);
+        else next.add(name);
+        return next;
+      });
+    }
+    setLastClickedIndex(index);
+  };
+
+  const toggleAll = () => {
+    if (checked.size === files.length && files.length > 0) {
+      setChecked(new Set());
+    } else {
+      setChecked(new Set(files.map(f => f.name)));
+    }
   };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -316,10 +345,33 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
       <div className="flex gap-4 flex-1 min-h-0">
       {/* File list */}
       <div className="w-72 flex-shrink-0 glass-card flex flex-col">
-        <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
-          <span className="section-header mb-0 flex-1">Image Files</span>
-          <button className="btn btn-outline py-1 px-2 text-xs" onClick={() => fileInput.current?.click()}>
-            <FiUpload /> Upload
+        <div className="px-4 py-3.5 border-b border-border flex items-center justify-between bg-bg-secondary/40 backdrop-blur-sm">
+          <div className="flex items-center gap-3.5">
+            {files.length > 0 && (
+              <button 
+                className="group/all flex-shrink-0"
+                onClick={toggleAll}
+                title={checked.size === files.length ? "Deselect All" : "Select All"}
+              >
+                <div className={`checkbox-custom ${checked.size === files.length ? 'checked' : ''} group-hover/all:border-accent-light`}>
+                  {checked.size === files.length && <FiCheckSquare size={12} />}
+                  {checked.size > 0 && checked.size < files.length && <div className="w-2 h-0.5 bg-accent-light rounded-full" />}
+                </div>
+              </button>
+            )}
+            <div className="flex flex-col">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-text-primary/90 leading-none">Image Files</span>
+              {files.length > 0 && (
+                <span className="text-[10px] text-accent/70 font-semibold mt-1 flex items-center gap-1">
+                  <span className="w-1 h-1 rounded-full bg-accent/40" />
+                  {checked.size} selected
+                </span>
+              )}
+            </div>
+          </div>
+          <button className="btn btn-outline py-1.5 px-3 text-[10px] h-7 gap-1.5 border-border/40 hover:border-accent/40 bg-white/5" onClick={() => fileInput.current?.click()}>
+            <FiUpload className="text-accent" size={12} /> 
+            <span>UPLOAD</span>
           </button>
           <input ref={fileInput} type="file" accept=".dcm" multiple hidden onChange={handleUpload} />
         </div>
@@ -327,27 +379,26 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
           {files.length === 0 ? (
             <p className="text-xs text-text-muted p-3 text-center">No files uploaded</p>
           ) : (
-            files.map((f) => (
+            files.map((f, i) => (
               <div
                 key={f.name}
-                className={`file-item group ${selected === f.name ? 'selected' : ''}`}
-                onClick={() => handleSelect(f.name)}
+                className={`file-item group ${selected === f.name ? 'selected' : ''} ${checked.has(f.name) ? 'checked' : ''}`}
+                onClick={(e) => toggleCheck(f.name, i, e)}
               >
+                <div className={`checkbox-custom ${checked.has(f.name) ? 'checked' : ''}`}>
+                  {checked.has(f.name) && <FiCheckSquare size={12} />}
+                </div>
+                <div className="relative">
+                  <FiFile className={`flex-shrink-0 transition-colors ${checked.has(f.name) ? 'text-accent' : 'text-text-muted'}`} size={16} />
+                  {modifiedFiles[f.name] && <div className="absolute -top-1 -right-1 w-2 h-2 bg-accent rounded-full border-2 border-bg-primary" title="Has modifications" />}
+                </div>
+                <span className={`flex-1 truncate transition-all ${checked.has(f.name) ? 'font-semibold text-text-primary' : 'text-text-secondary group-hover:text-text-primary'}`}>{f.name}</span>
                 <button
-                  className="flex-shrink-0 text-accent-light"
-                  onClick={(e) => toggleCheck(f.name, e)}
-                  title={checked.has(f.name) ? 'Uncheck' : 'Check for store'}
-                >
-                  {checked.has(f.name) ? <FiCheckSquare size={15} /> : <FiSquare size={15} />}
-                </button>
-                <FiFile className="flex-shrink-0" />
-                <span className="flex-1 truncate">{f.name}</span>
-                <button
-                  className="opacity-0 group-hover:opacity-100 text-danger hover:text-danger transition-opacity"
+                  className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-danger transition-all p-1.5 hover:bg-danger/10 rounded-md"
                   onClick={(e) => { e.stopPropagation(); handleDelete(f.name); }}
                   title="Delete"
                 >
-                  <FiTrash2 size={14} />
+                  <FiTrash2 size={13} />
                 </button>
               </div>
             ))

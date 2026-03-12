@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FiPlay, FiSquare, FiActivity, FiWifi } from 'react-icons/fi';
+import { FiPlay, FiSquare, FiActivity, FiWifi, FiRadio, FiDatabase, FiUploadCloud } from 'react-icons/fi';
 import * as api from '../api';
 import type { LogEntry } from '../App';
 
@@ -45,100 +45,129 @@ export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus
     });
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Emulator Status */}
-      <div className="glass-card p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-lg font-semibold text-text-primary">Emulator Status</h2>
-            <p className="text-sm text-text-secondary mt-1">
-              {emulatorStatus.running
-                ? `Listening as "${settings.emulator.aeTitle}" on port ${emulatorStatus.port}`
-                : 'Emulator is not running'}
-            </p>
+    <div className="max-w-5xl mx-auto space-y-8 py-4">
+      {/* Emulator Status Card */}
+      <div className="glass-card overflow-hidden border-l-4 border-l-accent animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="px-6 py-5 bg-gradient-to-r from-accent/5 to-transparent flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-500 ${emulatorStatus.running ? 'bg-success/10 text-success shadow-[0_0_20px_rgba(16,185,129,0.2)]' : 'bg-danger/10 text-danger'}`}>
+              <FiRadio size={24} className={emulatorStatus.running ? 'animate-pulse' : ''} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-text-primary tracking-tight">Modality Engine</h2>
+              <p className="text-xs text-text-muted mt-0.5 font-medium uppercase tracking-widest">
+                {emulatorStatus.running 
+                  ? `Active • ${settings.emulator.aeTitle} @ Port ${emulatorStatus.port}` 
+                  : 'Engine Standby'}
+              </p>
+            </div>
           </div>
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold
-            ${emulatorStatus.running ? 'bg-success-glow text-success' : 'bg-danger-glow text-danger'}`}>
-            <div className={`w-2 h-2 rounded-full ${emulatorStatus.running ? 'bg-success pulse-dot' : 'bg-danger'}`} />
-            {emulatorStatus.running ? 'Running' : 'Stopped'}
+          
+          <div className="flex gap-3">
+            {!emulatorStatus.running ? (
+              <button
+                id="btn-start-emulator"
+                className="btn btn-success px-6 shadow-lg shadow-success/20 hover:shadow-success/40 transition-all"
+                onClick={handleStart}
+                disabled={busy !== null}
+              >
+                <FiPlay fill="currentColor" /> Start Service
+              </button>
+            ) : (
+              <button
+                id="btn-stop-emulator"
+                className="btn btn-danger px-6 shadow-lg shadow-danger/20 hover:shadow-danger/40 transition-all"
+                onClick={handleStop}
+                disabled={busy !== null}
+              >
+                <FiSquare fill="currentColor" /> Shutdown
+              </button>
+            )}
           </div>
-        </div>
-        <div className="flex gap-3">
-          <button
-            id="btn-start-emulator"
-            className="btn btn-success"
-            onClick={handleStart}
-            disabled={emulatorStatus.running || busy !== null}
-          >
-            <FiPlay /> Start Emulator
-          </button>
-          <button
-            id="btn-stop-emulator"
-            className="btn btn-danger"
-            onClick={handleStop}
-            disabled={!emulatorStatus.running || busy !== null}
-          >
-            <FiSquare /> Stop Emulator
-          </button>
         </div>
       </div>
 
-      {/* RIS System */}
-      <div className="glass-card p-5">
-        <div className="flex items-center gap-2 mb-1">
-          <h3 className="text-base font-semibold text-text-primary">RIS System</h3>
-          <span className="text-xs text-text-muted">→ {settings.ris.ipAddress}:{settings.ris.port} ({settings.ris.aeTitle})</span>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* RIS System Card */}
+        <div className="glass-card p-6 flex flex-col hover:border-accent/30 transition-colors group">
+          <div className="flex items-start justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-lg bg-bg-secondary text-text-muted group-hover:text-accent transition-colors">
+                <FiDatabase size={20} />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider">RIS Connection</h3>
+                <span className="text-[10px] font-mono text-text-muted mt-0.5 block">{settings.ris.ipAddress}:{settings.ris.port}</span>
+              </div>
+            </div>
+            <div className="text-[10px] bg-bg-secondary px-2 py-0.5 rounded border border-border text-text-muted font-bold tracking-tighter self-start">
+              AET: {settings.ris.aeTitle}
+            </div>
+          </div>
+          
+          <p className="text-xs text-text-secondary leading-relaxed mb-8">
+            The Radiology Information System manages patient schedules and worklist queries. Verify connectivity before requesting worklists.
+          </p>
+          
+          <div className="flex gap-3 mt-auto">
+            <button
+              id="btn-ping-ris"
+              className="btn btn-outline flex-1 justify-center py-2 h-9 text-[11px] font-bold"
+              onClick={() => handleAction('Ping RIS', () => api.pingHost('ris'))}
+              disabled={busy !== null}
+            >
+              <FiWifi className="text-accent" /> {busy === 'Ping RIS' ? 'Connecting...' : 'PING HOST'}
+            </button>
+            <button
+              id="btn-echo-ris"
+              className="btn btn-outline flex-1 justify-center py-2 h-9 text-[11px] font-bold"
+              onClick={() => handleAction('DICOM Echo (RIS)', () => api.dicomEcho('ris'))}
+              disabled={busy !== null}
+            >
+              <FiActivity className="text-accent" /> {busy === 'DICOM Echo (RIS)' ? 'Echoing...' : 'C-ECHO'}
+            </button>
+          </div>
         </div>
-        <p className="text-sm text-text-secondary mb-4">
-          Interact with the configured RIS (Radiology Information System)
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <button
-            id="btn-ping-ris"
-            className="btn btn-primary"
-            onClick={() => handleAction('Ping RIS', () => api.pingHost('ris'))}
-            disabled={busy !== null}
-          >
-            <FiWifi /> {busy === 'Ping RIS' ? 'Pinging...' : 'Ping RIS'}
-          </button>
-          <button
-            id="btn-echo-ris"
-            className="btn btn-primary"
-            onClick={() => handleAction('DICOM Echo (RIS)', () => api.dicomEcho('ris'))}
-            disabled={busy !== null}
-          >
-            <FiActivity /> {busy === 'DICOM Echo (RIS)' ? 'Echoing...' : 'DICOM Echo'}
-          </button>
 
-        </div>
-      </div>
-
-      {/* PACS / Workstation */}
-      <div className="glass-card p-5">
-        <div className="flex items-center gap-2 mb-1">
-          <h3 className="text-base font-semibold text-text-primary">PACS / Workstation</h3>
-          <span className="text-xs text-text-muted">→ {settings.pacs.ipAddress}:{settings.pacs.port} ({settings.pacs.aeTitle})</span>
-        </div>
-        <p className="text-sm text-text-secondary mb-4">
-          Interact with the configured PACS or Workstation
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <button
-            id="btn-ping-pacs"
-            className="btn btn-primary"
-            onClick={() => handleAction('Ping PACS', () => api.pingHost('pacs'))}
-            disabled={busy !== null}
-          >
-            <FiWifi /> {busy === 'Ping PACS' ? 'Pinging...' : 'Ping PACS'}
-          </button>
-          <button
-            id="btn-echo-pacs"
-            className="btn btn-primary"
-            onClick={() => handleAction('DICOM Echo (PACS)', () => api.dicomEcho('pacs'))}
-            disabled={busy !== null}
-          >
-            <FiActivity /> {busy === 'DICOM Echo (PACS)' ? 'Echoing...' : 'DICOM Echo'}
-          </button>
+        {/* PACS System Card */}
+        <div className="glass-card p-6 flex flex-col hover:border-accent/30 transition-colors group">
+          <div className="flex items-start justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-lg bg-bg-secondary text-text-muted group-hover:text-accent transition-colors">
+                <FiUploadCloud size={20} />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider">PACS Storage</h3>
+                <span className="text-[10px] font-mono text-text-muted mt-0.5 block">{settings.pacs.ipAddress}:{settings.pacs.port}</span>
+              </div>
+            </div>
+            <div className="text-[10px] bg-bg-secondary px-2 py-0.5 rounded border border-border text-text-muted font-bold tracking-tighter self-start">
+              AET: {settings.pacs.aeTitle}
+            </div>
+          </div>
+          
+          <p className="text-xs text-text-secondary leading-relaxed mb-8">
+            Central imaging repository. Verify DICOM storage service availability before attempting to send patient studies.
+          </p>
+          
+          <div className="flex gap-3 mt-auto">
+            <button
+              id="btn-ping-pacs"
+              className="btn btn-outline flex-1 justify-center py-2 h-9 text-[11px] font-bold"
+              onClick={() => handleAction('Ping PACS', () => api.pingHost('pacs'))}
+              disabled={busy !== null}
+            >
+              <FiWifi className="text-accent" /> {busy === 'Ping PACS' ? 'Connecting...' : 'PING HOST'}
+            </button>
+            <button
+              id="btn-echo-pacs"
+              className="btn btn-outline flex-1 justify-center py-2 h-9 text-[11px] font-bold"
+              onClick={() => handleAction('DICOM Echo (PACS)', () => api.dicomEcho('pacs'))}
+              disabled={busy !== null}
+            >
+              <FiActivity className="text-accent" /> {busy === 'DICOM Echo (PACS)' ? 'Echoing...' : 'C-ECHO'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

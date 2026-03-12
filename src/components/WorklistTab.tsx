@@ -254,51 +254,45 @@ export default function WorklistTab({
 
       <div className="flex-1 flex gap-4 min-h-0">
         {/* Left Sidebar: File List */}
-        <div className={`glass-card flex flex-col overflow-hidden transition-all duration-300 ${panelStates.fileList ? 'w-72' : 'w-12'}`}>
-          <div 
-            className="px-3 py-2.5 border-b border-border flex items-center justify-between cursor-pointer hover:bg-bg-secondary/50"
-            onClick={() => togglePanel('fileList')}
-          >
-            <div className={`flex items-center gap-2 ${!panelStates.fileList && 'hidden'}`}>
-              <FiList className="text-text-muted" size={14} />
-              <span className="section-header mb-0">Local Templates</span>
+        <div className="w-72 flex-shrink-0 glass-card flex flex-col overflow-hidden">
+          <div className="px-4 py-3.5 border-b border-border flex items-center justify-between bg-bg-secondary/40 backdrop-blur-sm">
+            <div className="flex flex-col">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-text-primary/90 leading-none">Local Templates</span>
+              <span className="text-[10px] text-text-muted font-medium mt-1 flex items-center gap-1">
+                <FiList size={10} className="text-accent/60" />
+                {files.length} available
+              </span>
             </div>
-            {panelStates.fileList ? <FiChevronUp size={14} className="text-text-muted" /> : <FiChevronDown size={14} className="text-text-muted mx-auto" />}
+            <button className="btn btn-outline py-1.5 px-3 text-[10px] h-7 gap-1.5 border-border/40 hover:border-accent/40 bg-white/5" onClick={() => fileInput.current?.click()}>
+              <FiUpload className="text-accent" size={12} /> 
+              <span>UPLOAD</span>
+            </button>
+            <input ref={fileInput} type="file" accept=".dcm" multiple hidden onChange={handleUpload} />
           </div>
           
-          {panelStates.fileList && (
-            <>
-              <div className="p-2 border-b border-border">
-                <button className="btn btn-outline py-1 px-2 text-xs w-full" onClick={() => fileInput.current?.click()}>
-                  <FiUpload size={12} /> Upload File
-                </button>
-                <input ref={fileInput} type="file" accept=".dcm" multiple hidden onChange={handleUpload} />
-              </div>
-              <div className="flex-1 overflow-y-auto p-1.5">
-                {files.length === 0 ? (
-                  <p className="text-xs text-text-muted p-3 text-center">No files</p>
-                ) : (
-                  files.map((f) => (
-                    <div
-                      key={f.name}
-                      className={`file-item group ${selectedFile === f.name && viewMode === 'local' ? 'selected' : ''}`}
-                      onClick={() => handleSelectFile(f.name)}
-                    >
-                      <FiFile className="flex-shrink-0" />
-                      <span className="flex-1 truncate">{f.name}</span>
-                      <button
-                        className="opacity-0 group-hover:opacity-100 text-danger hover:text-danger transition-opacity"
-                        onClick={(e) => { e.stopPropagation(); handleDelete(f.name); }}
-                        title="Delete"
-                      >
-                        <FiTrash2 size={14} />
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </>
-          )}
+          <div className="flex-1 overflow-y-auto p-1.5">
+            {files.length === 0 ? (
+              <p className="text-xs text-text-muted p-3 text-center">No files</p>
+            ) : (
+              files.map((f) => (
+                <div
+                  key={f.name}
+                  className={`file-item group ${selectedFile === f.name && viewMode === 'local' ? 'selected' : ''}`}
+                  onClick={() => handleSelectFile(f.name)}
+                >
+                  <FiFile className={`flex-shrink-0 transition-colors ${selectedFile === f.name && viewMode === 'local' ? 'text-accent' : 'text-text-muted'}`} size={16} />
+                  <span className={`flex-1 truncate transition-all ${selectedFile === f.name && viewMode === 'local' ? 'font-semibold text-text-primary' : 'text-text-secondary group-hover:text-text-primary'}`}>{f.name}</span>
+                  <button
+                    className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-danger transition-all p-1.5 hover:bg-danger/10 rounded-md"
+                    onClick={(e) => { e.stopPropagation(); handleDelete(f.name); }}
+                    title="Delete"
+                  >
+                    <FiTrash2 size={13} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
         {/* Right Content: Results or Inspector */}
