@@ -4,20 +4,33 @@ import * as api from '../api';
 
 interface Props {
   onQuery: (query: api.WorklistQuery) => void;
+  onClear: () => void;
   isLoading: boolean;
   externalQuery?: api.WorklistQuery | null;
+  query: api.WorklistQuery;
+  setQuery: React.Dispatch<React.SetStateAction<api.WorklistQuery>>;
+  mode: 'form' | 'json';
+  setMode: React.Dispatch<React.SetStateAction<'form' | 'json'>>;
 }
 
-export default function WorklistQueryForm({ onQuery, isLoading, externalQuery }: Props) {
-  const [mode, setMode] = useState<'form' | 'json'>('form');
-  const [query, setQuery] = useState<api.WorklistQuery>({
+export default function WorklistQueryForm({ 
+  onQuery, 
+  onClear, 
+  isLoading, 
+  externalQuery,
+  query,
+  setQuery,
+  mode,
+  setMode
+}: Props) {
+  const initialQuery: api.WorklistQuery = {
     PatientName: '*',
     PatientID: '',
     AccessionNumber: '',
     Modality: '',
     ScheduledProcedureStepStartDate: '',
     ScheduledPerformingPhysicianName: '',
-  });
+  };
 
   const [rawJson, setRawJson] = useState('');
 
@@ -27,7 +40,7 @@ export default function WorklistQueryForm({ onQuery, isLoading, externalQuery }:
       setQuery(prev => ({ ...prev, ...externalQuery }));
       setRawJson(JSON.stringify(externalQuery, null, 2));
     }
-  }, [externalQuery]);
+  }, [externalQuery, setQuery]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -36,6 +49,12 @@ export default function WorklistQueryForm({ onQuery, isLoading, externalQuery }:
     } else {
       setQuery((prev) => ({ ...prev, [name]: value }));
     }
+  };
+
+  const handleReset = () => {
+    setQuery(initialQuery);
+    setRawJson('');
+    onClear();
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -71,7 +90,16 @@ export default function WorklistQueryForm({ onQuery, isLoading, externalQuery }:
             Raw JSON
           </button>
         </div>
-        {externalQuery && <span className="text-[10px] text-success italic font-medium">Template Loaded!</span>}
+        <div className="flex items-center gap-3">
+          {externalQuery && <span className="text-[10px] text-success italic font-medium">Template Loaded!</span>}
+          <button 
+            type="button" 
+            onClick={handleReset}
+            className="text-[10px] uppercase font-bold text-text-muted hover:text-danger transition-colors"
+          >
+            Reset Form
+          </button>
+        </div>
       </div>
 
       {mode === 'form' ? (

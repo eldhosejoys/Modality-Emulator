@@ -34,6 +34,22 @@ export default function App() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedWorklist, setSelectedWorklist] = useState<any | null>(null);
+  const [worklistResults, setWorklistResults] = useState<any[]>([]);
+  const [worklistViewMode, setWorklistViewMode] = useState<'local' | 'live'>('live');
+  const [worklistExternalQuery, setWorklistExternalQuery] = useState<api.WorklistQuery | null>(null);
+  const [worklistQuery, setWorklistQuery] = useState<api.WorklistQuery>({
+    PatientName: '*',
+    PatientID: '',
+    AccessionNumber: '',
+    Modality: '',
+    ScheduledProcedureStepStartDate: '',
+    ScheduledPerformingPhysicianName: '',
+  });
+  const [worklistFormMode, setWorklistFormMode] = useState<'form' | 'json'>('form');
+  const [worklistPanelStates, setWorklistPanelStates] = useState({
+    query: true,
+    fileList: true
+  });
 
   const addLog = useCallback((message: string, type: LogEntry['type'] = 'info') => {
     setLogs((prev) => [
@@ -151,6 +167,18 @@ export default function App() {
               addLog={addLog} 
               selectedWorklist={selectedWorklist} 
               onSelectWorklist={setSelectedWorklist} 
+              queryResults={worklistResults}
+              setQueryResults={setWorklistResults}
+              viewMode={worklistViewMode}
+              setViewMode={setWorklistViewMode}
+              externalQuery={worklistExternalQuery}
+              setExternalQuery={setWorklistExternalQuery}
+              panelStates={worklistPanelStates}
+              setPanelStates={setWorklistPanelStates}
+              query={worklistQuery}
+              setQuery={setWorklistQuery}
+              formMode={worklistFormMode}
+              setFormMode={setWorklistFormMode}
             />
           )}
           {activeTab === 'storage' && (

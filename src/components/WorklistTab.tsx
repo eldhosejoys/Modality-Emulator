@@ -8,20 +8,41 @@ interface Props {
   addLog: (msg: string, type?: LogEntry['type']) => void;
   selectedWorklist: any | null;
   onSelectWorklist: (worklist: any | null) => void;
+  queryResults: any[];
+  setQueryResults: (results: any[]) => void;
+  viewMode: 'local' | 'live';
+  setViewMode: (mode: 'local' | 'live') => void;
+  externalQuery: api.WorklistQuery | null;
+  setExternalQuery: (query: api.WorklistQuery | null) => void;
+  panelStates: { query: boolean; fileList: boolean };
+  setPanelStates: React.Dispatch<React.SetStateAction<{ query: boolean; fileList: boolean }>>;
+  query: api.WorklistQuery;
+  setQuery: React.Dispatch<React.SetStateAction<api.WorklistQuery>>;
+  formMode: 'form' | 'json';
+  setFormMode: React.Dispatch<React.SetStateAction<'form' | 'json'>>;
 }
 
-export default function WorklistTab({ addLog, selectedWorklist, onSelectWorklist }: Props) {
+export default function WorklistTab({ 
+  addLog, 
+  selectedWorklist, 
+  onSelectWorklist,
+  queryResults,
+  setQueryResults,
+  viewMode,
+  setViewMode,
+  externalQuery,
+  setExternalQuery,
+  panelStates,
+  setPanelStates,
+  query,
+  setQuery,
+  formMode,
+  setFormMode
+}: Props) {
   const [files, setFiles] = useState<api.FileInfo[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [tags, setTags] = useState<api.DicomTag[]>([]);
   const [loading, setLoading] = useState(false);
-  const [queryResults, setQueryResults] = useState<any[]>([]);
-  const [viewMode, setViewMode] = useState<'local' | 'live'>('live');
-  const [externalQuery, setExternalQuery] = useState<api.WorklistQuery | null>(null);
-  const [panelStates, setPanelStates] = useState({
-    query: true,
-    fileList: true
-  });
   
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -85,15 +106,9 @@ export default function WorklistTab({ addLog, selectedWorklist, onSelectWorklist
     try {
       const rawData = await api.getFileJson('worklist', selectedFile);
       
-      // Build a clean query payload suitable for C-FIND universal matching.
-      // The DCM file may contain specific values (e.g. a date like "20060801" inside
-      // ScheduledProcedureStepSequence) that were valid for creating the worklist entry
-      // but act as restrictive filters when used in a C-FIND query, returning 0 results.
-      // We reset date/time fields to "" (universal match) so Orthanc returns all entries.
       const sanitizedSequence = Array.isArray(rawData.ScheduledProcedureStepSequence)
         ? rawData.ScheduledProcedureStepSequence.map((step: any) => ({
             ...step,
-            // Reset date/time fields to universal match ("") inside the sequence
             ScheduledProcedureStepStartDate: '',
             ScheduledProcedureStepStartTime: '',
             ScheduledProcedureStepEndDate: '',
@@ -103,10 +118,8 @@ export default function WorklistTab({ addLog, selectedWorklist, onSelectWorklist
 
       const queryPayload: api.WorklistQuery = {
         ...rawData,
-        // Also reset top-level date fields that may be specific
         ScheduledProcedureStepStartDate: '',
         ScheduledPerformingPhysicianName: rawData.ScheduledPerformingPhysicianName || '',
-        // Replace sequence with sanitized version
         ...(sanitizedSequence !== undefined ? { ScheduledProcedureStepSequence: sanitizedSequence } : {}),
       };
 
@@ -152,7 +165,6 @@ export default function WorklistTab({ addLog, selectedWorklist, onSelectWorklist
         setQueryResults(result.data as any[] || []);
         addLog(`Worklist query successful: Found ${result.data ? (result.data as any[]).length : 0} results`, 'success');
         setViewMode('live');
-        // Collapse query panel to show results
         setPanelStates(prev => ({ ...prev, query: false }));
       } else {
         addLog(`Worklist query failed: ${result.message}`, 'error');
@@ -191,8 +203,13 @@ export default function WorklistTab({ addLog, selectedWorklist, onSelectWorklist
           <div className="p-5">
             <WorklistQueryForm 
               onQuery={handleLiveQuery} 
+              onClear={() => setQueryResults([])}
               isLoading={loading && viewMode === 'live'} 
               externalQuery={externalQuery}
+              query={query}
+              setQuery={setQuery}
+              mode={formMode}
+              setMode={setFormMode}
             />
           </div>
         )}
