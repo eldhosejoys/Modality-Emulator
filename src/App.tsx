@@ -56,7 +56,12 @@ export default function App() {
     setLogs((prev) => [
       {
         id,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date().toLocaleTimeString(undefined, {
+          hour: 'numeric',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true
+        }),
         message,
         type,
       },
