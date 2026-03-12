@@ -15,14 +15,24 @@ interface ToastProps {
 
 export default function Toast({ toast, onClose }: ToastProps) {
   const [isExiting, setIsExiting] = useState(false);
+  const [progress, setProgress] = useState(100);
+  const duration = toast.duration || 5000;
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      handleClose();
-    }, toast.duration || 5000);
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, 100 - (elapsed / duration) * 100);
+      setProgress(remaining);
+      
+      if (elapsed >= duration) {
+        clearInterval(interval);
+        handleClose();
+      }
+    }, 10);
 
-    return () => clearTimeout(timer);
-  }, [toast]);
+    return () => clearInterval(interval);
+  }, [toast, duration]);
 
   const handleClose = () => {
     setIsExiting(true);
@@ -45,10 +55,18 @@ export default function Toast({ toast, onClose }: ToastProps) {
     }
   };
 
+  const getProgressColor = () => {
+    switch (toast.type) {
+      case 'success': return 'bg-success';
+      case 'error': return 'bg-danger';
+      default: return 'bg-accent';
+    }
+  };
+
   return (
     <div 
       className={`
-        flex items-start gap-4 p-4 rounded-xl border backdrop-blur-md shadow-lg transition-all duration-300
+        relative overflow-hidden flex items-start gap-4 p-4 rounded-xl border backdrop-blur-md shadow-lg transition-all duration-300
         ${getTypeStyles()}
         ${isExiting ? 'opacity-0 -translate-y-4 scale-95' : 'opacity-100 translate-y-0 scale-100'}
         animate-slide-down
@@ -67,6 +85,14 @@ export default function Toast({ toast, onClose }: ToastProps) {
       >
         <FiX className="text-lg" />
       </button>
+
+      {/* Progress bar */}
+      <div className="absolute top-0 left-0 h-0.5 w-full bg-white/5 overflow-hidden">
+        <div 
+          className={`h-full opacity-60 transition-none ${getProgressColor()}`}
+          style={{ width: `${progress}%` }}
+        />
+      </div>
     </div>
   );
 }
