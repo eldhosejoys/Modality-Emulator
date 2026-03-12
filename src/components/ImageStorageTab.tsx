@@ -14,21 +14,60 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
   const [files, setFiles] = useState<api.FileInfo[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
-  const [tags, setTags] = useState<api.DicomTag[]>([]);
+  const [tags, setTags] = useState<(api.DicomTag & { source?: 'original' | 'worklist' | 'manual' })[]>([]);
   const [loadingTags, setLoadingTags] = useState(false);
   const [storing, setStoring] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [currentJson, setCurrentJson] = useState<any>(null);
+  const [modifiedFiles, setModifiedFiles] = useState<Record<string, any>>({});
   const fileInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (selected) handleSelect(selected);
+  }, [selectedWorklist]);
 
   // Helper to format DICOM values (handles strings vs complex objects like PN)
   const formatDicomValue = (val: any): string => {
     if (val === null || val === undefined) return '';
     if (typeof val === 'string') return val;
-    if (typeof val === 'object') {
+    if (typeof val === 'number') return String(val);
+    
+    // Handle arrays (sequences or multi-value fields)
+    if (Array.isArray(val)) {
+      if (val.length === 0) return '';
+      // Special case: Person Name (PN) sequence structure [{Alphabetic: '...'}]
+      if (typeof val[0] === 'object' && val[0] !== null && 'Alphabetic' in val[0]) {
+        return val[0].Alphabetic;
+      }
+      return val.map(v => typeof v === 'object' ? JSON.stringify(v) : v).join('\\');
+    }
+    
+    // Handle objects
+    if (typeof val === 'object' && val !== null) {
       if (val.Alphabetic) return val.Alphabetic;
-      // Fallback for other potential objects or arrays
       return JSON.stringify(val);
     }
     return String(val);
+  };
+
+  const getValueFromPath = (obj: any, path: string) => {
+    if (!obj) return undefined;
+    const parts = path.split(' > ');
+    let current = obj;
+    for (const part of parts) {
+      const arrayMatch = part.match(/(.+) \[(\d+)\]/);
+      if (arrayMatch) {
+         const key = arrayMatch[1];
+         const index = parseInt(arrayMatch[2]);
+         if (!current || !current[key] || !Array.isArray(current[key]) || !current[key][index]) return undefined;
+         current = current[key][index];
+      } else {
+         if (!current || typeof current !== 'object' || !(part in current)) return undefined;
+         current = current[part];
+      }
+    }
+    return current;
   };
 
   const loadFiles = async () => {
@@ -46,16 +85,125 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
   const handleSelect = async (name: string) => {
     setSelected(name);
     setLoadingTags(true);
+    setEditingIndex(null);
     try {
-      const parsed = await api.parseFile('images', name);
-      setTags(parsed);
+      const [parsed, json] = await Promise.all([
+        api.parseFile('images', name),
+        api.getFileJson('images', name)
+      ]);
+      
+      const fileModifications = modifiedFiles[name] || {};
+      
+      const updatedTags = parsed.map(t => {
+        if (t.isHeader || t.vr === 'SQ') return { ...t, source: 'original' as const };
+        
+        // 1. Manual override wins
+        const manualVal = getValueFromPath(fileModifications, t.name);
+        if (manualVal !== undefined) {
+          return { ...t, value: formatDicomValue(manualVal), source: 'manual' as const };
+        }
+        
+        // 2. Worklist binding (matches backend logic)
+        if (selectedWorklist) {
+          // Check for exact top-level matches
+          const binding: Record<string, any> = {
+            'PatientName': selectedWorklist.PatientName,
+            'PatientID': selectedWorklist.PatientID,
+            'PatientBirthDate': selectedWorklist.PatientBirthDate,
+            'PatientSex': selectedWorklist.PatientSex,
+            'AccessionNumber': selectedWorklist.AccessionNumber,
+            'StudyInstanceUID': selectedWorklist.StudyInstanceUID,
+            'ReferringPhysicianName': selectedWorklist.ReferringPhysicianName,
+            'StudyDescription': selectedWorklist.ScheduledProcedureStepSequence?.[0]?.ScheduledProcedureStepDescription || selectedWorklist.StudyDescription,
+          };
+          
+          if (t.name in binding && binding[t.name] !== undefined && binding[t.name] !== null) {
+            return { ...t, value: formatDicomValue(binding[t.name]), source: 'worklist' as const };
+          }
+
+          // Special case for nested Patient Name fields: "PatientName [0] > Alphabetic"
+          if (t.name.match(/PatientName.*Alphabetic/i) && selectedWorklist.PatientName) {
+             return { ...t, value: formatDicomValue(selectedWorklist.PatientName), source: 'worklist' as const };
+          }
+        }
+        
+        return { ...t, source: 'original' as const };
+      });
+      
+      setTags(updatedTags);
+      setCurrentJson(json); // RAW file JSON for base reference
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       addLog(`Failed to parse ${name}: ${msg}`, 'error');
       setTags([]);
+      setCurrentJson(null);
     } finally {
       setLoadingTags(false);
     }
+  };
+
+  const handleUpdateTag = (index: number) => {
+    if (editingIndex === null || !selected) return;
+    
+    const tag = tags[index];
+    const newTags = [...tags];
+    newTags[index] = { ...tag, value: editValue, source: 'manual' };
+    setTags(newTags);
+    
+    setModifiedFiles(prev => {
+      const next = JSON.parse(JSON.stringify(prev));
+      if (!next[selected]) next[selected] = {};
+      
+      const pathParts = tag.name.split(' > ');
+      let current = next[selected];
+      
+      for (let i = 0; i < pathParts.length; i++) {
+        const part = pathParts[i];
+        const arrayMatch = part.match(/(.+) \[(\d+)\]/);
+        
+        if (arrayMatch) {
+          const key = arrayMatch[1];
+          const idx = parseInt(arrayMatch[2]);
+          if (i === pathParts.length - 1) {
+            if (!current[key]) current[key] = [];
+            current[key][idx] = editValue;
+          } else {
+            if (!current[key]) current[key] = [];
+            if (!current[key][idx]) current[key][idx] = {};
+            current = current[key][idx];
+          }
+        } else {
+          if (i === pathParts.length - 1) {
+            current[part] = editValue;
+          } else {
+            if (!current[part]) current[part] = {};
+            current = current[part];
+          }
+        }
+      }
+      return next;
+    });
+    
+    setEditingIndex(null);
+  };
+
+  const handleResetAll = () => {
+    if (!window.confirm('Clear all local DICOM modifications?')) return;
+    setModifiedFiles({});
+    if (selected) {
+       // Refresh with fresh data directly to avoid waiting for state update
+       setLoadingTags(true);
+       Promise.all([
+         api.parseFile('images', selected),
+         api.getFileJson('images', selected)
+       ]).then(([parsed, json]) => {
+         setTags(parsed);
+         setCurrentJson(json);
+       }).catch(err => {
+         addLog(`Failed to reload file: ${err.message}`, 'error');
+       }).finally(() => setLoadingTags(false));
+    }
+    addLog('Reset all local DICOM modifications', 'info');
   };
 
   const toggleCheck = (name: string, e: React.MouseEvent) => {
@@ -103,7 +251,13 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
     setStoring(true);
     addLog(`Storing ${filenames.length} image(s) to PACS...`, 'info');
     try {
-      const result = await api.storeImages(filenames, selectedWorklist);
+      // Filter modifications to only include checked files
+      const relevantOverrides: Record<string, any> = {};
+      filenames.forEach(f => {
+        if (modifiedFiles[f]) relevantOverrides[f] = modifiedFiles[f];
+      });
+
+      const result = await api.storeImages(filenames, selectedWorklist, relevantOverrides);
       addLog(`Store Image: ${result.message}`, result.success ? 'success' : 'error');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -216,10 +370,23 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
 
       {/* Tags viewer */}
       <div className="flex-1 glass-card flex flex-col">
-        <div className="px-4 py-2.5 border-b border-border">
+        <div className="px-4 py-2.5 border-b border-border flex justify-between items-center">
           <span className="section-header mb-0">
             {selected ? `DICOM Tags — ${selected}` : 'Select a file to view tags'}
           </span>
+          {Object.keys(modifiedFiles).length > 0 && (
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] bg-accent/20 text-accent font-bold px-2 py-0.5 rounded-full">
+                {Object.keys(modifiedFiles).length} Persisted Modification(s)
+              </span>
+              <button 
+                className="text-[10px] text-danger hover:underline font-bold uppercase"
+                onClick={handleResetAll}
+              >
+                Reset All
+              </button>
+            </div>
+          )}
         </div>
         <div className="flex-1 overflow-auto">
           {loadingTags ? (
@@ -228,19 +395,60 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
             <table className="dicom-table">
               <thead>
                 <tr>
-                  <th>Tag</th>
+                  <th className="w-24">Tag</th>
                   <th>Name</th>
-                  <th>VR</th>
+                  <th className="w-12">VR</th>
                   <th>Value</th>
                 </tr>
               </thead>
               <tbody>
                 {tags.map((t, i) => (
-                  <tr key={i}>
-                    <td>{t.tag}</td>
-                    <td style={{ fontFamily: 'var(--font-sans)' }}>{t.name}</td>
-                    <td>{t.vr}</td>
-                    <td className="max-w-xs truncate" title={t.value}>{t.value}</td>
+                  <tr key={i} className={t.isHeader ? 'bg-bg-secondary/40 font-bold border-y border-border/50' : 'hover:bg-bg-secondary/20'}>
+                    <td className="text-[10px] text-text-muted font-mono">{t.tag}</td>
+                    <td 
+                      style={{ 
+                        fontFamily: 'var(--font-sans)',
+                        paddingLeft: t.name.includes('>') ? `${(t.name.split('>').length - 1) * 1.25 + 0.75}rem` : '0.75rem'
+                      }}
+                      className={`${t.isHeader ? 'text-accent' : 'text-text-primary'}`}
+                    >
+                      {t.name.includes('>') ? (
+                        <span className="flex items-center gap-1.5 opacity-80">
+                          <span className="text-[10px] text-text-muted">↳</span>
+                          {t.name.split('>').pop()?.trim()}
+                        </span>
+                      ) : t.name}
+                    </td>
+                    <td className="text-[10px] text-center font-mono opacity-60">{t.vr}</td>
+                    <td className={`max-w-md truncate ${t.isHeader ? 'italic text-text-muted text-[10px]' : ''}`} title={t.value}>
+                      {!t.isHeader && (t.vr !== 'SQ') ? (
+                        editingIndex === i ? (
+                          <input
+                            autoFocus
+                            className="bg-bg-input border border-accent rounded px-1 w-full text-text-primary outline-none focus:ring-1 ring-accent/50"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onBlur={() => handleUpdateTag(i)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleUpdateTag(i);
+                              if (e.key === 'Escape') setEditingIndex(null);
+                            }}
+                          />
+                        ) : (
+                          <div 
+                            className={`cursor-text hover:bg-accent/10 min-h-[1.2rem] px-1 rounded transition-colors group/edit relative ${t.source === 'manual' ? 'text-accent font-medium' : t.source === 'worklist' ? 'text-success italic' : ''}`}
+                            onClick={() => { setEditingIndex(i); setEditValue(t.value); }}
+                          >
+                            {t.value || <span className="text-text-muted/30 italic">empty</span>}
+                            {t.source === 'worklist' && <span className="ml-1.5 text-[8px] px-1 rounded bg-success/10 border border-success/20 not-italic font-bold">WORKLIST</span>}
+                            {t.source === 'manual' && <span className="ml-1.5 text-[8px] px-1 rounded bg-accent/10 border border-accent/20 font-bold">EDITED</span>}
+                            <span className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/edit:opacity-30 text-[9px] uppercase font-bold text-accent">edit</span>
+                          </div>
+                        )
+                      ) : (
+                        t.value
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

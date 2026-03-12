@@ -74,8 +74,8 @@ export interface WorklistQuery {
 export const requestWorklist = (query: WorklistQuery = {}) =>
   request<DicomResult>('/dicom/worklist', { method: 'POST', body: JSON.stringify(query) });
 
-export const storeImages = (filenames: string[], worklistData?: any) =>
-  request<DicomResult>('/dicom/store', { method: 'POST', body: JSON.stringify({ filenames, worklistData }) });
+export const storeImages = (filenames: string[], worklistData?: any, fileOverrides?: Record<string, any>) =>
+  request<DicomResult>('/dicom/store', { method: 'POST', body: JSON.stringify({ filenames, worklistData, fileOverrides }) });
 
 // ─── Files ──────────────────────────────────
 export interface FileInfo {
@@ -89,6 +89,7 @@ export interface DicomTag {
   name: string;
   vr: string;
   value: string;
+  isHeader?: boolean;
 }
 
 export const listFiles = (type: 'worklist' | 'images') =>

@@ -344,8 +344,20 @@ router.post('/worklist', async (req, res) => {
   }
 });
 
+// Helper: Deep merge for DICOM datasets
+function deepMerge(target, source) {
+  for (const key of Object.keys(source)) {
+    if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+      if (!target[key] || typeof target[key] !== 'object') target[key] = {};
+      deepMerge(target[key], source[key]);
+    } else {
+      target[key] = source[key];
+    }
+  }
+}
+
 // Helper: Update DICOM tags using dcmjs
-async function updateDicomTags(filePath, worklistData, outputPath) {
+async function updateDicomTags(filePath, worklistData, overrides, outputPath) {
   const dcmjs = await import('dcmjs');
   const { DicomMessage, DicomMetaDictionary } = dcmjs.data;
   
@@ -361,23 +373,30 @@ async function updateDicomTags(filePath, worklistData, outputPath) {
 
   const dataset = DicomMetaDictionary.naturalizeDataset(dicomDict.dict);
   
-  // Bind worklist data to image dataset
-  // We prioritize data from the worklist
-  const tagsToBind = {
-    'PatientName': worklistData.PatientName,
-    'PatientID': worklistData.PatientID,
-    'PatientBirthDate': worklistData.PatientBirthDate,
-    'PatientSex': worklistData.PatientSex,
-    'AccessionNumber': worklistData.AccessionNumber,
-    'StudyInstanceUID': worklistData.StudyInstanceUID,
-    'ReferringPhysicianName': worklistData.ReferringPhysicianName,
-    'StudyDescription': worklistData.ScheduledProcedureStepSequence?.[0]?.ScheduledProcedureStepDescription || worklistData.StudyDescription,
-  };
+  // 1. Apply worklist data if provided (Lower precedence)
+  if (worklistData) {
+    const tagsToBind = {
+      'PatientName': worklistData.PatientName,
+      'PatientID': worklistData.PatientID,
+      'PatientBirthDate': worklistData.PatientBirthDate,
+      'PatientSex': worklistData.PatientSex,
+      'AccessionNumber': worklistData.AccessionNumber,
+      'StudyInstanceUID': worklistData.StudyInstanceUID,
+      'ReferringPhysicianName': worklistData.ReferringPhysicianName,
+      'StudyDescription': worklistData.ScheduledProcedureStepSequence?.[0]?.ScheduledProcedureStepDescription || worklistData.StudyDescription,
+    };
 
-  for (const [key, value] of Object.entries(tagsToBind)) {
-    if (value !== undefined && value !== null) {
-      dataset[key] = value;
+    for (const [key, value] of Object.entries(tagsToBind)) {
+      if (value !== undefined && value !== null) {
+        dataset[key] = value;
+      }
     }
+  }
+
+  // 2. Apply per-file overrides (Highest precedence - wins over worklist)
+  if (overrides) {
+    console.log('    → Applying manual overrides:', Object.keys(overrides));
+    deepMerge(dataset, overrides);
   }
 
   // Denaturalize back to DICOM format
@@ -393,7 +412,7 @@ async function updateDicomTags(filePath, worklistData, outputPath) {
 router.post('/store', async (req, res) => {
   let tempFiles = [];
   try {
-    const { filenames, worklistData } = req.body;
+    const { filenames, worklistData, fileOverrides } = req.body;
     if (!filenames || !filenames.length) {
       return res.status(400).json({ success: false, message: 'No files specified' });
     }
@@ -407,18 +426,24 @@ router.post('/store', async (req, res) => {
 
     let filePathsToStore = filenames.map((name) => join(imagesDir, name));
 
-    // If worklist data is provided, update images first
-    if (worklistData) {
-      console.log(`  🔄 Binding worklist data to ${filenames.length} image(s) before storage`);
+    // If worklist data OR file overrides are provided, update images first
+    if (worklistData || (fileOverrides && Object.keys(fileOverrides).length > 0)) {
+      console.log(`  🔄 Processing ${filenames.length} image(s) with ${worklistData ? 'worklist' : 'no'} binding and ${fileOverrides ? Object.keys(fileOverrides).length : 0} overrides`);
       const updatedPaths = [];
       for (const name of filenames) {
         const srcPath = join(imagesDir, name);
         if (!fs.existsSync(srcPath)) continue;
         
-        const tmpPath = join(tmpDir, `bound_${Date.now()}_${name}`);
-        await updateDicomTags(srcPath, worklistData, tmpPath);
-        updatedPaths.push(tmpPath);
-        tempFiles.push(tmpPath);
+        const overrides = fileOverrides ? fileOverrides[name] : null;
+        
+        if (worklistData || overrides) {
+          const tmpPath = join(tmpDir, `modified_${Date.now()}_${name}`);
+          await updateDicomTags(srcPath, worklistData, overrides, tmpPath);
+          updatedPaths.push(tmpPath);
+          tempFiles.push(tmpPath);
+        } else {
+          updatedPaths.push(srcPath);
+        }
       }
       filePathsToStore = updatedPaths;
     }
