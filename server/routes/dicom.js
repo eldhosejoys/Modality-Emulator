@@ -383,6 +383,7 @@ async function updateDicomTags(filePath, worklistData, overrides, outputPath) {
       'AccessionNumber': worklistData.AccessionNumber,
       'StudyInstanceUID': worklistData.StudyInstanceUID,
       'ReferringPhysicianName': worklistData.ReferringPhysicianName,
+      'Modality': worklistData.ScheduledProcedureStepSequence?.[0]?.Modality || worklistData.Modality,
       'StudyDescription': worklistData.ScheduledProcedureStepSequence?.[0]?.ScheduledProcedureStepDescription || worklistData.StudyDescription,
     };
 

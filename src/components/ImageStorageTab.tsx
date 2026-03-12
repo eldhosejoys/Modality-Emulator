@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { FiFile, FiUpload, FiTrash2, FiUploadCloud, FiCheckSquare, FiSquare } from 'react-icons/fi';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { FiFile, FiUpload, FiTrash2, FiUploadCloud, FiCheckSquare, FiSquare, FiRotateCcw, FiExternalLink } from 'react-icons/fi';
 import * as api from '../api';
 import type { LogEntry, TabId } from '../App';
 
@@ -14,7 +14,7 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
   const [files, setFiles] = useState<api.FileInfo[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
-  const [tags, setTags] = useState<(api.DicomTag & { source?: 'original' | 'worklist' | 'manual' })[]>([]);
+  const [originalTags, setOriginalTags] = useState<api.DicomTag[]>([]);
   const [loadingTags, setLoadingTags] = useState(false);
   const [storing, setStoring] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -24,9 +24,8 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
   const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (selected) handleSelect(selected);
-  }, [selectedWorklist]);
+  // No manual trigger needed for worklist change; useMemo will handle it
+  // useEffect(() => { if (selected) handleSelect(selected); }, [selectedWorklist]);
 
   // Helper to format DICOM values (handles strings vs complex objects like PN)
   const formatDicomValue = (val: any): string => {
@@ -83,6 +82,56 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
 
   useEffect(() => { loadFiles(); }, []);
 
+  const tags = useMemo(() => {
+    if (!selected || originalTags.length === 0) return [];
+    
+    const fileModifications = modifiedFiles[selected] || {};
+    
+    return originalTags.map(t => {
+      if (t.isHeader || t.vr === 'SQ') return { ...t, source: 'original' as const };
+      
+      const manualVal = getValueFromPath(fileModifications, t.name);
+      const originalVal = t.value;
+      
+      // 1. Check Worklist binding first
+      let worklistVal: string | undefined = undefined;
+      if (selectedWorklist) {
+        const binding: Record<string, any> = {
+          'PatientName': selectedWorklist.PatientName,
+          'PatientID': selectedWorklist.PatientID,
+          'PatientBirthDate': selectedWorklist.PatientBirthDate,
+          'PatientSex': selectedWorklist.PatientSex,
+          'AccessionNumber': selectedWorklist.AccessionNumber,
+          'StudyInstanceUID': selectedWorklist.StudyInstanceUID,
+          'ReferringPhysicianName': selectedWorklist.ReferringPhysicianName,
+          'Modality': selectedWorklist.ScheduledProcedureStepSequence?.[0]?.Modality || selectedWorklist.Modality,
+          'StudyDescription': selectedWorklist.ScheduledProcedureStepSequence?.[0]?.ScheduledProcedureStepDescription || selectedWorklist.StudyDescription,
+        };
+        
+        if (t.name in binding && binding[t.name] !== undefined && binding[t.name] !== null) {
+          worklistVal = formatDicomValue(binding[t.name]);
+        } else if (t.name.match(/PatientName.*Alphabetic/i) && selectedWorklist.PatientName) {
+          worklistVal = formatDicomValue(selectedWorklist.PatientName);
+        }
+      }
+
+      // 2. Resolve final value and source
+      if (manualVal !== undefined) {
+        const formattedManual = formatDicomValue(manualVal);
+        if (formattedManual === originalVal) {
+           return { ...t, value: originalVal, source: (worklistVal !== undefined ? 'unbound' : 'original') as any };
+        }
+        return { ...t, value: formattedManual, source: 'manual' as any };
+      }
+      
+      if (worklistVal !== undefined) {
+        return { ...t, value: worklistVal, source: 'worklist' as any };
+      }
+      
+      return { ...t, value: originalVal, source: 'original' as any };
+    });
+  }, [originalTags, modifiedFiles, selected, selectedWorklist]);
+
   const handleSelect = async (name: string) => {
     setSelected(name);
     setLoadingTags(true);
@@ -92,51 +141,12 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
         api.parseFile('images', name),
         api.getFileJson('images', name)
       ]);
-      
-      const fileModifications = modifiedFiles[name] || {};
-      
-      const updatedTags = parsed.map(t => {
-        if (t.isHeader || t.vr === 'SQ') return { ...t, source: 'original' as const };
-        
-        // 1. Manual override wins
-        const manualVal = getValueFromPath(fileModifications, t.name);
-        if (manualVal !== undefined) {
-          return { ...t, value: formatDicomValue(manualVal), source: 'manual' as const };
-        }
-        
-        // 2. Worklist binding (matches backend logic)
-        if (selectedWorklist) {
-          // Check for exact top-level matches
-          const binding: Record<string, any> = {
-            'PatientName': selectedWorklist.PatientName,
-            'PatientID': selectedWorklist.PatientID,
-            'PatientBirthDate': selectedWorklist.PatientBirthDate,
-            'PatientSex': selectedWorklist.PatientSex,
-            'AccessionNumber': selectedWorklist.AccessionNumber,
-            'StudyInstanceUID': selectedWorklist.StudyInstanceUID,
-            'ReferringPhysicianName': selectedWorklist.ReferringPhysicianName,
-            'StudyDescription': selectedWorklist.ScheduledProcedureStepSequence?.[0]?.ScheduledProcedureStepDescription || selectedWorklist.StudyDescription,
-          };
-          
-          if (t.name in binding && binding[t.name] !== undefined && binding[t.name] !== null) {
-            return { ...t, value: formatDicomValue(binding[t.name]), source: 'worklist' as const };
-          }
-
-          // Special case for nested Patient Name fields: "PatientName [0] > Alphabetic"
-          if (t.name.match(/PatientName.*Alphabetic/i) && selectedWorklist.PatientName) {
-             return { ...t, value: formatDicomValue(selectedWorklist.PatientName), source: 'worklist' as const };
-          }
-        }
-        
-        return { ...t, source: 'original' as const };
-      });
-      
-      setTags(updatedTags);
-      setCurrentJson(json); // RAW file JSON for base reference
+      setOriginalTags(parsed);
+      setCurrentJson(json);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       addLog(`Failed to parse ${name}: ${msg}`, 'error');
-      setTags([]);
+      setOriginalTags([]);
       setCurrentJson(null);
     } finally {
       setLoadingTags(false);
@@ -147,9 +157,6 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
     if (editingIndex === null || !selected) return;
     
     const tag = tags[index];
-    const newTags = [...tags];
-    newTags[index] = { ...tag, value: editValue, source: 'manual' };
-    setTags(newTags);
     
     setModifiedFiles(prev => {
       const next = JSON.parse(JSON.stringify(prev));
@@ -188,21 +195,78 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
     setEditingIndex(null);
   };
 
+  const handleResetTag = (index: number) => {
+    if (!selected || !currentJson) return;
+    const tag = tags[index];
+    const pathParts = tag.name.split(' > ');
+
+    setModifiedFiles(prev => {
+      const next = JSON.parse(JSON.stringify(prev));
+      if (!next[selected]) next[selected] = {};
+      let current = next[selected];
+
+      if (tag.source === 'manual' || tag.source === 'unbound') {
+        // Remove override
+        for (let i = 0; i < pathParts.length; i++) {
+          const part = pathParts[i];
+          const arrayMatch = part.match(/(.+) \[(\d+)\]/);
+          if (arrayMatch) {
+            const key = arrayMatch[1];
+            const idx = parseInt(arrayMatch[2]);
+            if (i === pathParts.length - 1) {
+              if (current[key]) delete current[key][idx];
+            } else {
+              if (!current[key] || !current[key][idx]) break;
+              current = current[key][idx];
+            }
+          } else {
+            if (i === pathParts.length - 1) {
+              delete current[part];
+            } else {
+              if (!current[part]) break;
+              current = current[part];
+            }
+          }
+        }
+      } else if (tag.source === 'worklist') {
+        // Add override matching original
+        const originalValue = getValueFromPath(currentJson, tag.name);
+        const valToSet = originalValue === undefined ? "" : formatDicomValue(originalValue);
+        
+        for (let i = 0; i < pathParts.length; i++) {
+          const part = pathParts[i];
+          const arrayMatch = part.match(/(.+) \[(\d+)\]/);
+          if (arrayMatch) {
+            const key = arrayMatch[1];
+            const idx = parseInt(arrayMatch[2]);
+            if (i === pathParts.length - 1) {
+              if (!current[key]) current[key] = [];
+              current[key][idx] = valToSet;
+            } else {
+              if (!current[key]) current[key] = [];
+              if (!current[key][idx]) current[key][idx] = {};
+              current = current[key][idx];
+            }
+          } else {
+            if (i === pathParts.length - 1) {
+              current[part] = valToSet;
+            } else {
+              if (!current[part]) current[part] = {};
+              current = current[part];
+            }
+          }
+        }
+      }
+      return next;
+    });
+  };
+
   const handleResetAll = () => {
     if (!window.confirm('Clear all local DICOM modifications?')) return;
     setModifiedFiles({});
     if (selected) {
-       // Refresh with fresh data directly to avoid waiting for state update
-       setLoadingTags(true);
-       Promise.all([
-         api.parseFile('images', selected),
-         api.getFileJson('images', selected)
-       ]).then(([parsed, json]) => {
-         setTags(parsed);
-         setCurrentJson(json);
-       }).catch(err => {
-         addLog(`Failed to reload file: ${err.message}`, 'error');
-       }).finally(() => setLoadingTags(false));
+       // Just refresh original tags if needed, but setModifiedFiles already triggers UI update
+       handleSelect(selected);
     }
     addLog('Reset all local DICOM modifications', 'info');
   };
@@ -262,7 +326,7 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
     try {
       await api.deleteFile('images', name);
       addLog(`Deleted ${name}`, 'success');
-      if (selected === name) { setSelected(null); setTags([]); }
+      if (selected === name) { setSelected(null); setOriginalTags([]); }
       setChecked((prev) => { const n = new Set(prev); n.delete(name); return n; });
       loadFiles();
     } catch (err: unknown) {
@@ -319,6 +383,7 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
             </div>
           </div>
           <button 
+            type="button"
             className="btn btn-outline py-1 px-3 text-xs border-danger/30 text-danger hover:bg-danger hover:text-white"
             onClick={() => onSelectWorklist(null)}
           >
@@ -333,6 +398,7 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
           </div>
           {setActiveTab && (
             <button 
+              type="button"
               className="text-[10px] uppercase font-bold text-accent hover:text-accent-light px-2"
               onClick={() => setActiveTab('worklist')}
             >
@@ -349,6 +415,7 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
           <div className="flex items-center gap-3.5">
             {files.length > 0 && (
               <button 
+                type="button"
                 className="group/all flex-shrink-0"
                 onClick={toggleAll}
                 title={checked.size === files.length ? "Deselect All" : "Select All"}
@@ -369,7 +436,7 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
               )}
             </div>
           </div>
-          <button className="btn btn-outline py-1.5 px-3 text-[10px] h-7 gap-1.5 border-border/40 hover:border-accent/40 bg-white/5" onClick={() => fileInput.current?.click()}>
+          <button type="button" className="btn btn-outline py-1.5 px-3 text-[10px] h-7 gap-1.5 border-border/40 hover:border-accent/40 bg-white/5" onClick={() => fileInput.current?.click()}>
             <FiUpload className="text-accent" size={12} /> 
             <span>UPLOAD</span>
           </button>
@@ -394,6 +461,7 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
                 </div>
                 <span className={`flex-1 truncate transition-all ${checked.has(f.name) ? 'font-semibold text-text-primary' : 'text-text-secondary group-hover:text-text-primary'}`}>{f.name}</span>
                 <button
+                  type="button"
                   className="opacity-0 group-hover:opacity-100 text-text-muted hover:text-danger transition-all p-1.5 hover:bg-danger/10 rounded-md"
                   onClick={(e) => { e.stopPropagation(); handleDelete(f.name); }}
                   title="Delete"
@@ -407,6 +475,7 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
         {files.length > 0 && (
           <div className="px-3 py-2.5 border-t border-border">
             <button
+              type="button"
               id="btn-store-selected"
               className="btn btn-primary w-full justify-center"
               onClick={handleStore}
@@ -431,6 +500,7 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
                 {Object.keys(modifiedFiles).length} Persisted Modification(s)
               </span>
               <button 
+                type="button"
                 className="text-[10px] text-danger hover:underline font-bold uppercase"
                 onClick={handleResetAll}
               >
@@ -493,7 +563,23 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
                             {t.value || <span className="text-text-muted/30 italic">empty</span>}
                             {t.source === 'worklist' && <span className="ml-1.5 text-[8px] px-1 rounded bg-success/10 border border-success/20 not-italic font-bold">WORKLIST</span>}
                             {t.source === 'manual' && <span className="ml-1.5 text-[8px] px-1 rounded bg-accent/10 border border-accent/20 font-bold">EDITED</span>}
+                            {t.source === 'unbound' && <span className="ml-1.5 text-[8px] px-1 rounded bg-yellow-500/10 border border-yellow-500/20 text-yellow-500/80 font-bold">ORIGINAL</span>}
                             <span className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/edit:opacity-30 text-[9px] uppercase font-bold text-accent">edit</span>
+                            
+                            {t.source !== 'original' && (
+                              <button 
+                                type="button"
+                                className="absolute right-10 top-1/2 -translate-y-1/2 opacity-0 group-hover/edit:opacity-100 p-1.5 hover:text-accent transition-all bg-bg-primary rounded-md border border-border/50 shadow-md z-10"
+                                onClick={(e) => { 
+                                  e.preventDefault();
+                                  e.stopPropagation(); 
+                                  handleResetTag(i); 
+                                }}
+                                title="Reset to Original"
+                              >
+                                <FiRotateCcw size={12} />
+                              </button>
+                            )}
                           </div>
                         )
                       ) : (
