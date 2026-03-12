@@ -81,19 +81,40 @@ async function performWorklistQuery(host, port, callingAeTitle, calledAeTitle, q
     const client = new Client();
     
     // Build the query dataset based on provided params or defaults
-    const queryParams = {
-      PatientName: query.PatientName || '*',
-      PatientID: query.PatientID || '',
-      AccessionNumber: query.AccessionNumber || '',
-      ScheduledProcedureStepSequence: [
-        {
-          Modality: query.Modality || '',
-          ScheduledProcedureStepStartDate: query.ScheduledProcedureStepStartDate || '',
-          ScheduledPerformingPhysicianName: query.ScheduledPerformingPhysicianName || '',
-        },
-      ],
-      ...query
-    };
+    // Note: Empty strings signify universal matching (return these attributes)
+    let queryParams;
+    
+    // If the query looks like a full DICOM JSON (has ScheduledProcedureStepSequence at root), use it as is
+    if (query.ScheduledProcedureStepSequence) {
+      queryParams = { ...query };
+    } else {
+      queryParams = {
+        PatientName: query.PatientName || '',
+        PatientID: query.PatientID || '',
+        AccessionNumber: query.AccessionNumber || '',
+        PatientBirthDate: query.PatientBirthDate || '',
+        PatientSex: query.PatientSex || '',
+        RequestedProcedureID: query.RequestedProcedureID || '',
+        RequestedProcedureDescription: '',
+        StudyInstanceUID: '',
+        ScheduledProcedureStepSequence: [
+          {
+            Modality: query.Modality || '',
+            ScheduledProcedureStepStartDate: query.ScheduledProcedureStepStartDate || '',
+            ScheduledProcedureStepStartTime: '',
+            ScheduledPerformingPhysicianName: query.ScheduledPerformingPhysicianName || '',
+            ScheduledStationAETitle: query.ScheduledStationAETitle || '',
+            ScheduledProcedureStepDescription: '',
+            ScheduledProcedureStepID: '',
+            ScheduledStationName: '',
+          },
+        ],
+        ...query
+      };
+    }
+
+    console.log(`  🔍 Sending C-FIND Worklist Request to ${host}:${port} (${calledAeTitle})`);
+    console.log(`  → Query:`, JSON.stringify(queryParams, null, 2));
 
     const request = CFindRequest.createWorklistFindRequest(queryParams);
 
@@ -109,10 +130,13 @@ async function performWorklistQuery(host, port, callingAeTitle, calledAeTitle, q
         // Pending - more results coming
         const dataset = response.getDataset();
         if (dataset) {
+          // In MWL, results are datasets. We'll toString() them for display, 
+          // or we could extract specific fields.
           results.push(dataset.toString());
         }
       } else if (status === 0x0000) {
         // Success, no more results
+        console.log(`  ✅ Worklist query success: Found ${results.length} results.`);
         resolve({
           success: true,
           message: `Worklist query completed. Found ${results.length} result(s).`,
@@ -120,19 +144,23 @@ async function performWorklistQuery(host, port, callingAeTitle, calledAeTitle, q
         });
         client.release();
       } else {
+        const statusHex = `0x${status.toString(16).padStart(4, '0').toUpperCase()}`;
+        console.warn(`  ⚠️ Worklist query returned status: ${statusHex}`);
         resolve({
           success: false,
-          message: `Worklist query returned status: 0x${status.toString(16).padStart(4, '0').toUpperCase()}`,
+          message: `Worklist query returned status: ${statusHex}`,
         });
         client.release();
       }
     });
 
     client.on('associationRejected', (result) => {
+      console.error('  ❌ Worklist association rejected:', result);
       reject(new Error(`Association rejected: ${JSON.stringify(result)}`));
     });
 
     client.on('networkError', (err) => {
+      console.error('  ❌ Worklist network error:', err.message);
       reject(err);
     });
 

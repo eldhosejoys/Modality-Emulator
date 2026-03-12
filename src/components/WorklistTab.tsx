@@ -15,6 +15,7 @@ export default function WorklistTab({ addLog }: Props) {
   const [loading, setLoading] = useState(false);
   const [queryResults, setQueryResults] = useState<any[]>([]);
   const [viewMode, setViewMode] = useState<'local' | 'live'>('live');
+  const [externalQuery, setExternalQuery] = useState<api.WorklistQuery | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const loadFiles = async () => {
@@ -70,6 +71,35 @@ export default function WorklistTab({ addLog }: Props) {
     }
   };
 
+  const handleUseAsTemplate = async () => {
+    if (!selectedFile) return;
+    
+    setLoading(true);
+    try {
+      const rawData = await api.getFileJson('worklist', selectedFile);
+      
+      const newQuery: api.WorklistQuery = {};
+      const getVal = (name: string) => rawData[name] || '';
+
+      newQuery.PatientName = getVal('PatientName');
+      newQuery.PatientID = getVal('PatientID');
+      newQuery.AccessionNumber = getVal('AccessionNumber');
+      newQuery.Modality = getVal('Modality');
+      newQuery.ScheduledProcedureStepStartDate = getVal('ScheduledProcedureStepStartDate');
+      newQuery.ScheduledPerformingPhysicianName = getVal('ScheduledPerformingPhysicianName');
+      
+      // Pass the WHOLE thing as the external query so the JSON mode gets it all
+      setExternalQuery({ ...rawData, ...newQuery });
+      setViewMode('live');
+      addLog('Loaded actual data from template: ' + selectedFile, 'success');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      addLog(`Failed to load template data: ${msg}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLiveQuery = async (query: api.WorklistQuery) => {
     setLoading(true);
     setQueryResults([]);
@@ -92,17 +122,19 @@ export default function WorklistTab({ addLog }: Props) {
 
   return (
     <div className="flex flex-col h-full gap-4">
-      {/* Top Section: Query Form */}
       <div className="glass-card p-5">
         <div className="flex items-center gap-2 mb-4">
           <FiDatabase className="text-accent" />
           <h2 className="text-lg font-semibold text-text-primary">Live RIS Worklist Query</h2>
         </div>
-        <WorklistQueryForm onQuery={handleLiveQuery} isLoading={loading && viewMode === 'live'} />
+        <WorklistQueryForm 
+          onQuery={handleLiveQuery} 
+          isLoading={loading && viewMode === 'live'} 
+          externalQuery={externalQuery}
+        />
       </div>
 
       <div className="flex-1 flex gap-4 min-h-0">
-        {/* Left: Local Files List */}
         <div className="w-68 flex-shrink-0 glass-card flex flex-col">
           <div className="px-3 py-2.5 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -139,13 +171,20 @@ export default function WorklistTab({ addLog }: Props) {
           </div>
         </div>
 
-        {/* Right: Results Display */}
         <div className="flex-1 glass-card flex flex-col min-h-0 overflow-hidden">
           <div className="px-4 py-2.5 border-b border-border flex justify-between items-center">
             <span className="section-header mb-0">
               {viewMode === 'live' ? `Query Results (${queryResults.length})` : `Local File Tags: ${selectedFile}`}
             </span>
             <div className="flex gap-2">
+              {viewMode === 'local' && selectedFile && (
+                <button 
+                  className="text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-success text-success hover:bg-success hover:text-white transition-colors"
+                  onClick={handleUseAsTemplate}
+                >
+                  Use as Query Template
+                </button>
+              )}
               <button 
                 className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${viewMode === 'live' ? 'bg-accent text-white border-accent' : 'border-border text-text-muted'}`}
                 onClick={() => setViewMode('live')}
@@ -197,12 +236,22 @@ export default function WorklistTab({ addLog }: Props) {
                     </tr>
                   </thead>
                   <tbody>
-                    {tags.map((t, i) => (
-                      <tr key={i}>
-                        <td>{t.tag}</td>
-                        <td style={{ fontFamily: 'var(--font-sans)' }}>{t.name}</td>
-                        <td>{t.vr}</td>
-                        <td className="max-w-xs truncate" title={t.value}>{t.value}</td>
+                    {tags.map((t: any, i) => (
+                      <tr key={i} className={t.isHeader ? 'bg-bg-secondary font-bold' : ''}>
+                        <td className="text-[10px] text-text-muted">{t.tag}</td>
+                        <td 
+                          style={{ 
+                            fontFamily: 'var(--font-sans)',
+                            paddingLeft: t.name.includes('>') ? `${(t.name.split('>').length - 1) * 1.5}rem` : '0.75rem'
+                          }}
+                          className={`${t.isHeader ? 'text-accent' : 'text-text-primary'}`}
+                        >
+                          {t.name.split('>').pop()?.trim()}
+                        </td>
+                        <td className="text-[10px] text-center">{t.vr}</td>
+                        <td className={`max-w-xs truncate ${t.isHeader ? 'italic text-text-muted' : ''}`} title={t.value}>
+                          {t.value}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

@@ -24,59 +24,20 @@ const TAG_DICTIONARY = {
   '00080031': 'Series Time',
   '00080050': 'Accession Number',
   '00080060': 'Modality',
-  '00080064': 'Conversion Type',
   '00080070': 'Manufacturer',
   '00080080': 'Institution Name',
   '00080090': 'Referring Physician Name',
   '00081030': 'Study Description',
   '0008103E': 'Series Description',
-  '00081110': 'Referenced Study Sequence',
-  '00081150': 'Referenced SOP Class UID',
-  '00081155': 'Referenced SOP Instance UID',
   '00100010': 'Patient Name',
   '00100020': 'Patient ID',
-  '00100021': 'Issuer of Patient ID',
   '00100030': 'Patient Birth Date',
   '00100040': 'Patient Sex',
-  '00101000': 'Other Patient IDs',
-  '00101020': 'Patient Size',
-  '00101030': 'Patient Weight',
   '0020000D': 'Study Instance UID',
   '0020000E': 'Series Instance UID',
-  '00200010': 'Study ID',
-  '00200011': 'Series Number',
-  '00200013': 'Instance Number',
-  '00200020': 'Patient Orientation',
-  '00280002': 'Samples per Pixel',
-  '00280004': 'Photometric Interpretation',
   '00280010': 'Rows',
   '00280011': 'Columns',
-  '00280030': 'Pixel Spacing',
-  '00280100': 'Bits Allocated',
-  '00280101': 'Bits Stored',
-  '00280102': 'High Bit',
-  '00280103': 'Pixel Representation',
-  '00321032': 'Requesting Physician',
-  '00321060': 'Requested Procedure Description',
-  '00380010': 'Admission ID',
-  '00400001': 'Scheduled Station AE Title',
-  '00400002': 'Scheduled Procedure Step Start Date',
-  '00400003': 'Scheduled Procedure Step Start Time',
-  '00400006': 'Scheduled Performing Physician Name',
-  '00400007': 'Scheduled Procedure Step Description',
-  '00400009': 'Scheduled Procedure Step ID',
   '00400100': 'Scheduled Procedure Step Sequence',
-  '00401001': 'Requested Procedure ID',
-  '7FE00010': 'Pixel Data',
-};
-
-// VR name mapping
-const VR_NAMES = {
-  AE: 'AE', AS: 'AS', AT: 'AT', CS: 'CS', DA: 'DA', DS: 'DS',
-  DT: 'DT', FL: 'FL', FD: 'FD', IS: 'IS', LO: 'LO', LT: 'LT',
-  OB: 'OB', OD: 'OD', OF: 'OF', OW: 'OW', PN: 'PN', SH: 'SH',
-  SL: 'SL', SQ: 'SQ', SS: 'SS', ST: 'ST', TM: 'TM', UC: 'UC',
-  UI: 'UI', UL: 'UL', UN: 'UN', UR: 'UR', US: 'US', UT: 'UT',
 };
 
 // Multer setup for file uploads
@@ -112,7 +73,7 @@ function listFilesInDir(subdir) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-// Helper: parse a DICOM file and return tags
+// Helper: parse a DICOM file and return tags recursively
 async function parseDicomFile(filePath) {
   try {
     const buffer = fs.readFileSync(filePath);
@@ -125,72 +86,92 @@ async function parseDicomFile(filePath) {
     try {
       dicomDict = DicomMessage.readFile(arrayBuffer);
     } catch {
-      // Try reading as raw dataset (no preamble/meta)
       dicomDict = DicomMessage.readFile(arrayBuffer, { ignoreErrors: true });
     }
 
     const dataset = DicomMetaDictionary.naturalizeDataset(dicomDict.dict);
     const metaDataset = dicomDict.meta ? DicomMetaDictionary.naturalizeDataset(dicomDict.meta) : {};
-
-    const tags = [];
     const allData = { ...metaDataset, ...dataset };
 
-    for (const [keyword, value] of Object.entries(allData)) {
-      if (keyword.startsWith('_')) continue;
+    const flattenTags = (data, prefix = '') => {
+      const result = [];
+      for (const [keyword, value] of Object.entries(data)) {
+        if (keyword.startsWith('_')) continue;
 
-      // Try to find the tag number
-      const tagInfo = DicomMetaDictionary.nameMap?.[keyword];
-      let tagStr = tagInfo?.tag || '';
-      if (tagStr) {
-        // Format as (XXXX,YYYY)
-        const clean = tagStr.replace(/[^0-9a-fA-F]/g, '').padStart(8, '0');
-        tagStr = `(${clean.substring(0, 4)},${clean.substring(4, 8)})`.toUpperCase();
-      }
-
-      const vr = tagInfo?.vr || 'UN';
-      let displayValue = '';
-
-      if (value === null || value === undefined) {
-        displayValue = '';
-      } else if (typeof value === 'object' && value instanceof ArrayBuffer) {
-        displayValue = `[Binary data: ${value.byteLength} bytes]`;
-      } else if (Array.isArray(value)) {
-        if (value.length > 0 && typeof value[0] === 'object') {
-          displayValue = `[Sequence: ${value.length} item(s)]`;
-        } else {
-          displayValue = value.join('\\');
+        const tagInfo = DicomMetaDictionary.nameMap?.[keyword];
+        let tagStr = tagInfo?.tag || '';
+        if (tagStr) {
+          const clean = tagStr.replace(/[^0-9a-fA-F]/g, '').padStart(8, '0');
+          tagStr = `(${clean.substring(0, 4)},${clean.substring(4, 8)})`.toUpperCase();
         }
-      } else if (typeof value === 'object') {
-        displayValue = JSON.stringify(value);
-      } else {
-        displayValue = String(value);
+
+        const vr = tagInfo?.vr || 'UN';
+        const displayName = prefix ? `${prefix} > ${keyword}` : keyword;
+
+        // Check for sequence or nested objects
+        const isArrayOfObjects = Array.isArray(value) && value.length > 0 && typeof value[0] === 'object' && !(value[0] instanceof ArrayBuffer);
+        const isObject = value !== null && typeof value === 'object' && !(value instanceof ArrayBuffer) && !Array.isArray(value);
+
+        if (isArrayOfObjects) {
+          result.push({
+            tag: tagStr,
+            name: displayName,
+            vr: 'SQ',
+            value: `[Sequence: ${value.length} item(s)]`,
+            isHeader: true
+          });
+          value.forEach((item, index) => {
+            result.push(...flattenTags(item, `${displayName} [${index}]`));
+          });
+        } else if (isObject) {
+          // Handle nested objects that aren't arrays (like PN components if naturalized as object)
+          result.push({
+            tag: tagStr,
+            name: displayName,
+            vr: vr,
+            value: `[Nested Data]`,
+            isHeader: true
+          });
+          result.push(...flattenTags(value, displayName));
+        } else {
+          let displayValue = '';
+          const isBinary = value instanceof ArrayBuffer || (value && value.buffer instanceof ArrayBuffer);
+
+          if (value === null || value === undefined) {
+            displayValue = '';
+          } else if (isBinary) {
+            // Convert binary to Hex string for small items, or show size
+            const bytes = value instanceof ArrayBuffer ? new Uint8Array(value) : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+            if (bytes.length <= 8) {
+              displayValue = Array.from(bytes).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join('\\');
+            } else {
+              displayValue = `[Binary data: ${bytes.length} bytes]`;
+            }
+          } else if (Array.isArray(value)) {
+            displayValue = value.join('\\');
+          } else {
+            displayValue = String(value);
+          }
+
+          if (displayValue.length > 300) {
+            displayValue = displayValue.substring(0, 300) + '...';
+          }
+
+          result.push({
+            tag: tagStr,
+            name: displayName,
+            vr,
+            value: displayValue,
+          });
+        }
       }
+      return result;
+    };
 
-      // Truncate very long values
-      if (displayValue.length > 200) {
-        displayValue = displayValue.substring(0, 200) + '...';
-      }
-
-      tags.push({
-        tag: tagStr,
-        name: keyword,
-        vr,
-        value: displayValue,
-      });
-    }
-
-    // Sort by tag
-    tags.sort((a, b) => a.tag.localeCompare(b.tag));
-    return tags;
+    return flattenTags(allData);
   } catch (err) {
     console.error('Error parsing DICOM file:', err.message);
-    // Return basic file info if parsing fails
-    return [{
-      tag: '',
-      name: 'Parse Error',
-      vr: '',
-      value: err.message,
-    }];
+    return [{ tag: '', name: 'Parse Error', vr: '', value: err.message }];
   }
 }
 
@@ -243,14 +224,51 @@ router.delete('/images/:filename', (req, res) => {
 // GET /api/files/parse/:type/:filename
 router.get('/parse/:type/:filename', async (req, res) => {
   const { type, filename } = req.params;
-  if (!['worklist', 'images'].includes(type)) {
-    return res.status(400).json({ error: 'Invalid type' });
-  }
+  if (!['worklist', 'images'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
   const fp = join(DATA_DIR, type, filename);
   if (!fs.existsSync(fp)) return res.status(404).json({ error: 'File not found' });
 
   const tags = await parseDicomFile(fp);
   res.json(tags);
+});
+
+// GET /api/files/json/:type/:filename
+router.get('/json/:type/:filename', async (req, res) => {
+  const { type, filename } = req.params;
+  if (!['worklist', 'images'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
+  const fp = join(DATA_DIR, type, filename);
+  if (!fs.existsSync(fp)) return res.status(404).json({ error: 'File not found' });
+
+  try {
+    const buffer = fs.readFileSync(fp);
+    const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+    const dcmjs = await import('dcmjs');
+    const { DicomMessage, DicomMetaDictionary } = dcmjs.data;
+
+    let dicomDict;
+    try {
+      dicomDict = DicomMessage.readFile(arrayBuffer);
+    } catch {
+      dicomDict = DicomMessage.readFile(arrayBuffer, { ignoreErrors: true });
+    }
+
+    const dataset = DicomMetaDictionary.naturalizeDataset(dicomDict.dict);
+    const cleanObject = (obj) => {
+      if (Array.isArray(obj)) {
+        obj.forEach(cleanObject);
+      } else if (obj && typeof obj === 'object' && !(obj instanceof ArrayBuffer)) {
+        delete obj._vrMap;
+        delete obj._keyword;
+        Object.values(obj).forEach(cleanObject);
+      }
+    };
+    
+    cleanObject(dataset);
+    delete dataset.PixelData;
+    res.json(dataset);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

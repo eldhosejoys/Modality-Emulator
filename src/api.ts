@@ -100,6 +100,9 @@ export const deleteFile = (type: 'worklist' | 'images', filename: string) =>
 export const parseFile = (type: 'worklist' | 'images', filename: string) =>
   request<DicomTag[]>(`/files/parse/${type}/${encodeURIComponent(filename)}`);
 
+export const getFileJson = (type: 'worklist' | 'images', filename: string) =>
+  request<any>(`/files/json/${type}/${encodeURIComponent(filename)}`);
+
 export async function uploadFiles(type: 'worklist' | 'images', files: FileList): Promise<FileInfo[]> {
   const formData = new FormData();
   for (let i = 0; i < files.length; i++) {
