@@ -241,28 +241,33 @@ async function performStore(host, port, callingAeTitle, calledAeTitle, filePaths
     const client = new Client();
     let successCount = 0;
     let failCount = 0;
+    let completedCount = 0;
 
-    client.on('associationAccepted', () => {
-      const requests = filePaths.map((fp) => new CStoreRequest(fp));
-      requests.forEach((req) => {
-        req.on('response', (response) => {
-          const status = response.getStatus();
-          if (status === 0x0000) {
-            successCount++;
-          } else {
-            failCount++;
-          }
-        });
+    const requests = filePaths.map((fp) => {
+      const request = new CStoreRequest(fp);
+      request.on('response', (response) => {
+        const status = response.getStatus();
+        if (status === 0x0000) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+        completedCount++;
+        
+        if (completedCount === filePaths.length) {
+          resolve({
+            success: failCount === 0,
+            message: `Store complete: ${successCount} succeeded, ${failCount} failed out of ${filePaths.length} file(s)`,
+          });
+          client.release();
+        }
       });
-      client.sendRequests(requests);
+      return request;
     });
 
-    client.on('cStoreComplete', () => {
-      resolve({
-        success: failCount === 0,
-        message: `Store complete: ${successCount} succeeded, ${failCount} failed out of ${filePaths.length} file(s)`,
-      });
-      client.release();
+    client.on('associationAccepted', () => {
+      // Send the requests once association is established
+      client.sendRequests(requests);
     });
 
     client.on('associationRejected', (result) => {
@@ -273,9 +278,8 @@ async function performStore(host, port, callingAeTitle, calledAeTitle, filePaths
       reject(err);
     });
 
-    filePaths.forEach((fp) => {
-      client.addRequest(new CStoreRequest(fp));
-    });
+    // Add requests to the client and initiate connection
+    requests.forEach((req) => client.addRequest(req));
     client.send(host, port, callingAeTitle, calledAeTitle);
   });
 }
