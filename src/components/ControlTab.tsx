@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FiPlay, FiSquare, FiActivity, FiWifi, FiSend, FiUploadCloud } from 'react-icons/fi';
+import { FiPlay, FiSquare, FiActivity, FiWifi } from 'react-icons/fi';
 import * as api from '../api';
 import type { LogEntry } from '../App';
 
@@ -109,14 +109,7 @@ export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus
           >
             <FiActivity /> {busy === 'DICOM Echo (RIS)' ? 'Echoing...' : 'DICOM Echo'}
           </button>
-          <button
-            id="btn-request-worklist"
-            className="btn btn-primary"
-            onClick={() => handleAction('Request Worklist', () => api.requestWorklist())}
-            disabled={busy !== null}
-          >
-            <FiSend /> {busy === 'Request Worklist' ? 'Requesting...' : 'Request Worklist'}
-          </button>
+
         </div>
       </div>
 
@@ -146,18 +139,7 @@ export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus
           >
             <FiActivity /> {busy === 'DICOM Echo (PACS)' ? 'Echoing...' : 'DICOM Echo'}
           </button>
-          <button
-            id="btn-store-images"
-            className="btn btn-primary"
-            onClick={() => handleAction('Store Image', () => api.storeImages([]))}
-            disabled={busy !== null}
-          >
-            <FiUploadCloud /> {busy === 'Store Image' ? 'Storing...' : 'Store Image'}
-          </button>
         </div>
-        <p className="text-xs text-text-muted mt-3">
-          💡 To select specific images for storage, go to the <strong>Image Storage</strong> tab, select files, then use the Store button there.
-        </p>
       </div>
     </div>
   );
