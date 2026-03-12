@@ -1,0 +1,17 @@
+{
+  "emulator": {
+    "systemName": "Modality",
+    "aeTitle": "DVTK",
+    "listenPort": 104
+  },
+  "ris": {
+    "ipAddress": "192.168.1.2",
+    "port": 4242,
+    "aeTitle": "ORTHANC"
+  },
+  "pacs": {
+    "ipAddress": "192.168.1.2",
+    "port": 4242,
+    "aeTitle": "ORTHANC"
+  }
+}
