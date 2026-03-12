@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FiRadio, FiTrash2 } from 'react-icons/fi';
+import { FiRadio, FiTrash2, FiSettings } from 'react-icons/fi';
 import ControlTab from './components/ControlTab';
-import RemoteSystemsTab from './components/RemoteSystemsTab';
-import EmulatorConfigTab from './components/EmulatorConfigTab';
 import WorklistTab from './components/WorklistTab';
 import ImageStorageTab from './components/ImageStorageTab';
 import ActivityLog from './components/ActivityLog';
+import SettingsModal from './components/SettingsModal';
 import * as api from './api';
 
 export interface LogEntry {
@@ -17,8 +16,6 @@ export interface LogEntry {
 
 const TABS = [
   { id: 'control', label: 'Control' },
-  { id: 'remote', label: 'Remote Systems' },
-  { id: 'emulator', label: 'Emulator Config' },
   { id: 'worklist', label: 'Worklist Query' },
   { id: 'storage', label: 'Image Storage' },
 ] as const;
@@ -30,6 +27,7 @@ let logIdCounter = 0;
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('control');
   const [settings, setSettings] = useState<api.Settings | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [emulatorStatus, setEmulatorStatus] = useState<api.EmulatorStatus>({ running: false });
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,11 +118,20 @@ export default function App() {
             <h1 className="text-base font-semibold text-text-primary tracking-tight">Modality Emulator</h1>
             <p className="text-xs text-text-muted">DICOM Modality Testing Tool</p>
           </div>
-          <div className="ml-auto flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${emulatorStatus.running ? 'bg-success pulse-dot' : 'bg-danger'}`} />
-            <span className="text-xs font-medium text-text-secondary">
-              {emulatorStatus.running ? `Running on port ${emulatorStatus.port}` : 'Stopped'}
-            </span>
+          <div className="ml-auto flex items-center gap-4">
+            <div className="flex items-center gap-2 pr-4 border-r border-border">
+              <div className={`w-2 h-2 rounded-full ${emulatorStatus.running ? 'bg-success pulse-dot' : 'bg-danger'}`} />
+              <span className="text-xs font-medium text-text-secondary">
+                {emulatorStatus.running ? `Running on port ${emulatorStatus.port}` : 'Stopped'}
+              </span>
+            </div>
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="p-2 hover:bg-white/10 rounded-lg transition-colors text-text-secondary hover:text-accent-light"
+              title="Settings"
+            >
+              <FiSettings className="text-xl" />
+            </button>
           </div>
         </div>
       </header>
@@ -155,12 +162,6 @@ export default function App() {
               setEmulatorStatus={setEmulatorStatus}
               addLog={addLog}
             />
-          )}
-          {activeTab === 'remote' && settings && (
-            <RemoteSystemsTab settings={settings} onSave={handleSaveSettings} addLog={addLog} />
-          )}
-          {activeTab === 'emulator' && settings && (
-            <EmulatorConfigTab settings={settings} onSave={handleSaveSettings} addLog={addLog} />
           )}
           {activeTab === 'worklist' && (
             <WorklistTab 
@@ -210,6 +211,15 @@ export default function App() {
           </div>
         </aside>
       </div>
+      {settings && (
+        <SettingsModal 
+          isOpen={isSettingsOpen} 
+          onClose={() => setIsSettingsOpen(false)} 
+          settings={settings}
+          onSave={handleSaveSettings}
+          addLog={addLog}
+        />
+      )}
     </div>
   );
 }
