@@ -4,7 +4,7 @@ import { FiCheckCircle, FiInfo, FiAlertCircle, FiX } from 'react-icons/fi';
 export interface ToastMessage {
   id: number;
   message: string;
-  type: 'info' | 'success' | 'error';
+  type: 'info' | 'success' | 'warning' | 'error';
   duration?: number;
 }
 

@@ -5,6 +5,7 @@ import type { LogEntry, TabId } from '../App';
 import WorklistQueryForm from './WorklistQueryForm';
 
 interface Props {
+  settings: api.Settings;
   addLog: (msg: string, type?: LogEntry['type']) => void;
   selectedWorklist: any | null;
   onSelectWorklist: (worklist: any | null) => void;
@@ -24,6 +25,7 @@ interface Props {
 }
 
 export default function WorklistTab({ 
+  settings,
   addLog, 
   selectedWorklist, 
   onSelectWorklist,
@@ -48,8 +50,15 @@ export default function WorklistTab({
   const [loading, setLoading] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [targetRisId, setTargetRisId] = useState<string>(settings.selectedRisId || settings.ris[0]?.id || '');
   
   const fileInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (settings.selectedRisId && !targetRisId) {
+      setTargetRisId(settings.selectedRisId);
+    }
+  }, [settings.selectedRisId]);
 
   const loadFiles = async () => {
     try {
@@ -197,7 +206,7 @@ export default function WorklistTab({
     setLoading(true);
     setQueryResults([]);
     try {
-      const result = await api.requestWorklist(query);
+      const result = await api.requestWorklist(query, targetRisId);
       if (result.success) {
         setQueryResults(result.data as any[] || []);
         addLog(`Worklist query successful: Found ${result.data ? (result.data as any[]).length : 0} results`, 'success');
@@ -224,13 +233,29 @@ export default function WorklistTab({
       <div className="glass-card flex flex-col min-h-0 overflow-hidden transition-all duration-300">
         <div 
           className="p-4 border-b border-border flex items-center justify-between cursor-pointer hover:bg-bg-secondary/50 group"
-          onClick={() => togglePanel('query')}
         >
-          <div className="flex items-center gap-2">
-            <FiDatabase className="text-accent" />
-            <h2 className="text-sm font-semibold text-text-primary">Live RIS Worklist Query</h2>
+          <div className="flex items-center gap-6" onClick={() => togglePanel('query')}>
+            <div className="flex items-center gap-2">
+              <FiDatabase className="text-accent" />
+              <h2 className="text-sm font-semibold text-text-primary">Live RIS Worklist Query</h2>
+            </div>
+            
+            <div className="h-4 w-px bg-border" />
+            
+            <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+              <label className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Target RIS:</label>
+              <select 
+                className="bg-bg-secondary border border-border/50 rounded px-2 py-1 text-xs text-text-primary outline-none focus:border-accent/50"
+                value={targetRisId}
+                onChange={(e) => setTargetRisId(e.target.value)}
+              >
+                {settings.ris.map(r => (
+                  <option key={r.id} value={r.id}>{r.name} ({r.aeTitle})</option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" onClick={() => togglePanel('query')}>
             {!panelStates.query && <span className="text-[10px] text-text-muted px-2 py-0.5 rounded-full bg-bg-secondary">Collapsed</span>}
             {panelStates.query ? <FiChevronUp className="text-text-muted group-hover:text-accent" /> : <FiChevronDown className="text-text-muted group-hover:text-accent" />}
           </div>

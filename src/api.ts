@@ -12,8 +12,19 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+// ─── Shared Types ────────────────────────────
+export interface LogEntry {
+  id: string | number;
+  timestamp: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  isExternal?: boolean;
+}
+
 // ─── Settings ────────────────────────────────
 export interface RemoteSystem {
+  id: string;
+  name: string;
   ipAddress: string;
   port: number;
   aeTitle: string;
@@ -27,8 +38,10 @@ export interface EmulatorConfig {
 
 export interface Settings {
   emulator: EmulatorConfig;
-  ris: RemoteSystem;
-  pacs: RemoteSystem;
+  ris: RemoteSystem[];
+  pacs: RemoteSystem[];
+  selectedRisId?: string;
+  selectedPacsId?: string;
 }
 
 export const getSettings = () => request<Settings>('/settings');
@@ -57,10 +70,10 @@ export interface DicomResult {
   data?: unknown;
 }
 
-export const pingHost = (target: 'ris' | 'pacs') =>
+export const pingHost = (target: string) =>
   request<DicomResult>('/dicom/ping', { method: 'POST', body: JSON.stringify({ target }) });
 
-export const dicomEcho = (target: 'ris' | 'pacs') =>
+export const dicomEcho = (target: string) =>
   request<DicomResult>('/dicom/echo', { method: 'POST', body: JSON.stringify({ target }) });
 
 export interface WorklistQuery {
@@ -73,11 +86,11 @@ export interface WorklistQuery {
   [key: string]: any;
 }
 
-export const requestWorklist = (query: WorklistQuery = {}) =>
-  request<DicomResult>('/dicom/worklist', { method: 'POST', body: JSON.stringify(query) });
+export const requestWorklist = (query: WorklistQuery = {}, targetRisId?: string) =>
+  request<DicomResult>('/dicom/worklist', { method: 'POST', body: JSON.stringify({ query, targetRisId }) });
 
-export const storeImages = (filenames: string[], worklistData?: any, fileOverrides?: Record<string, any>) =>
-  request<DicomResult>('/dicom/store', { method: 'POST', body: JSON.stringify({ filenames, worklistData, fileOverrides }) });
+export const storeImages = (filenames: string[], targetPacsId?: string, worklistData?: any, fileOverrides?: Record<string, any>) =>
+  request<DicomResult>('/dicom/store', { method: 'POST', body: JSON.stringify({ filenames, targetPacsId, worklistData, fileOverrides }) });
 
 // ─── Files ──────────────────────────────────
 export interface FileInfo {

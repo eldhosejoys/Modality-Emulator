@@ -12,7 +12,8 @@ export interface LogEntry {
   id: number | string;
   timestamp: string;
   message: string;
-  type: 'info' | 'success' | 'error';
+  type: 'info' | 'success' | 'warning' | 'error';
+  isExternal?: boolean;
 }
 
 const TABS = [
@@ -227,8 +228,9 @@ export default function App() {
               addLog={addLog}
             />
           )}
-          {activeTab === 'worklist' && (
+          {activeTab === 'worklist' && settings && (
             <WorklistTab 
+              settings={settings}
               addLog={addLog} 
               selectedWorklist={selectedWorklist} 
               onSelectWorklist={handleSelectWorklist} 
@@ -247,8 +249,9 @@ export default function App() {
               setFormMode={setWorklistFormMode}
             />
           )}
-          {activeTab === 'storage' && (
+          {activeTab === 'storage' && settings && (
             <ImageStorageTab 
+              settings={settings}
               addLog={addLog} 
               selectedWorklist={selectedWorklist} 
               onSelectWorklist={handleSelectWorklist}

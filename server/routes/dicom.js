@@ -304,9 +304,12 @@ async function performStore(host, port, callingAeTitle, calledAeTitle, filePaths
 // POST /api/dicom/ping
 router.post('/ping', async (req, res) => {
   try {
-    const { target } = req.body; // 'ris' or 'pacs'
+    const { target } = req.body; // id of pacs or ris
     const settings = readSettings();
-    const remote = settings[target];
+    let remote = null;
+    
+    remote = settings.ris.find(r => r.id === target) || settings.pacs.find(p => p.id === target);
+    
     if (!remote) return res.status(400).json({ success: false, message: `Unknown target: ${target}` });
 
     await tcpPing(remote.ipAddress, remote.port);
@@ -321,7 +324,10 @@ router.post('/echo', async (req, res) => {
   try {
     const { target } = req.body;
     const settings = readSettings();
-    const remote = settings[target];
+    let remote = null;
+    
+    remote = settings.ris.find(r => r.id === target) || settings.pacs.find(p => p.id === target);
+
     if (!remote) return res.status(400).json({ success: false, message: `Unknown target: ${target}` });
 
     const result = await performEcho(remote.ipAddress, remote.port, settings.emulator.aeTitle, remote.aeTitle);
@@ -335,9 +341,16 @@ router.post('/echo', async (req, res) => {
 router.post('/worklist', async (req, res) => {
   try {
     const settings = readSettings();
-    const ris = settings.ris;
-    const query = req.body || {};
-    const result = await performWorklistQuery(ris.ipAddress, ris.port, settings.emulator.aeTitle, ris.aeTitle, query);
+    const { query, targetRisId } = req.body;
+    
+    const risId = targetRisId || settings.selectedRisId;
+    const ris = settings.ris.find(r => r.id === risId) || settings.ris[0];
+
+    if (!ris) {
+      return res.status(400).json({ success: false, message: 'No RIS configured' });
+    }
+
+    const result = await performWorklistQuery(ris.ipAddress, ris.port, settings.emulator.aeTitle, ris.aeTitle, query || {});
     res.json(result);
   } catch (err) {
     res.json({ success: false, message: `Worklist query failed: ${err.message}` });
@@ -413,13 +426,19 @@ async function updateDicomTags(filePath, worklistData, overrides, outputPath) {
 router.post('/store', async (req, res) => {
   let tempFiles = [];
   try {
-    const { filenames, worklistData, fileOverrides } = req.body;
+    const { filenames, targetPacsId, worklistData, fileOverrides } = req.body;
     if (!filenames || !filenames.length) {
       return res.status(400).json({ success: false, message: 'No files specified' });
     }
 
     const settings = readSettings();
-    const pacs = settings.pacs;
+    const pacsId = targetPacsId || settings.selectedPacsId;
+    const pacs = settings.pacs.find(p => p.id === pacsId) || settings.pacs[0];
+    
+    if (!pacs) {
+      return res.status(400).json({ success: false, message: 'No PACS configured' });
+    }
+
     const imagesDir = join(__dirname, '..', 'data', 'images');
     const tmpDir = join(__dirname, '..', 'data', 'tmp');
     

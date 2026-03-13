@@ -4,13 +4,14 @@ import * as api from '../api';
 import type { LogEntry, TabId } from '../App';
 
 interface Props {
+  settings: api.Settings;
   addLog: (msg: string, type?: LogEntry['type']) => void;
   selectedWorklist: any | null;
   onSelectWorklist: (worklist: any | null) => void;
   setActiveTab?: (tab: TabId) => void;
 }
 
-export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWorklist, setActiveTab }: Props) {
+export default function ImageStorageTab({ settings, addLog, selectedWorklist, onSelectWorklist, setActiveTab }: Props) {
   const [files, setFiles] = useState<api.FileInfo[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -22,7 +23,14 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
   const [currentJson, setCurrentJson] = useState<any>(null);
   const [modifiedFiles, setModifiedFiles] = useState<Record<string, any>>({});
   const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
+  const [targetPacsId, setTargetPacsId] = useState<string>(settings.selectedPacsId || settings.pacs[0]?.id || '');
   const fileInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (settings.selectedPacsId && !targetPacsId) {
+      setTargetPacsId(settings.selectedPacsId);
+    }
+  }, [settings.selectedPacsId]);
 
   // No manual trigger needed for worklist change; useMemo will handle it
   // useEffect(() => { if (selected) handleSelect(selected); }, [selectedWorklist]);
@@ -356,8 +364,11 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
       addLog('No files selected for storage', 'error');
       return;
     }
+    const targetPacs = settings.pacs.find(p => p.id === targetPacsId);
+    const pacsName = targetPacs ? targetPacs.name : 'PACS';
+
     setStoring(true);
-    addLog(`Storing ${filenames.length} image(s) to PACS...`, 'info');
+    addLog(`Storing ${filenames.length} image(s) to ${pacsName}...`, 'info');
     try {
       // Filter modifications to only include checked files
       const relevantOverrides: Record<string, any> = {};
@@ -365,7 +376,7 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
         if (modifiedFiles[f]) relevantOverrides[f] = modifiedFiles[f];
       });
 
-      const result = await api.storeImages(filenames, selectedWorklist, relevantOverrides);
+      const result = await api.storeImages(filenames, targetPacsId, selectedWorklist, relevantOverrides);
       addLog(`Store Image: ${result.message}`, result.success ? 'success' : 'error');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -451,10 +462,12 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
               )}
             </div>
           </div>
-          <button type="button" className="btn btn-outline py-1.5 px-3 text-[10px] h-7 gap-1.5 border-border/40 hover:border-accent/40 bg-white/5" onClick={() => fileInput.current?.click()}>
-            <FiUpload className="text-accent" size={12} /> 
-            <span>UPLOAD</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" className="btn btn-outline py-1.5 px-3 text-[10px] h-7 gap-1.5 border-border/40 hover:border-accent/40 bg-white/5" onClick={() => fileInput.current?.click()}>
+              <FiUpload className="text-accent" size={12} /> 
+              <span>UPLOAD</span>
+            </button>
+          </div>
           <input ref={fileInput} type="file" accept=".dcm" multiple hidden onChange={handleUpload} />
         </div>
         <div className="flex-1 overflow-y-auto p-1.5">
@@ -488,11 +501,24 @@ export default function ImageStorageTab({ addLog, selectedWorklist, onSelectWork
           )}
         </div>
         {files.length > 0 && (
-          <div className="px-3 py-2.5 border-t border-border">
+          <div className="px-3 py-3 border-t border-border space-y-3 bg-bg-secondary/20">
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-text-muted uppercase tracking-wider px-1">Target Destination</label>
+              <select 
+                className="bg-bg-input border border-border/50 rounded-lg w-full px-3 py-2 text-xs text-text-primary outline-none focus:border-accent/50 transition-all font-medium"
+                value={targetPacsId}
+                onChange={(e) => setTargetPacsId(e.target.value)}
+              >
+                {settings.pacs.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.aeTitle})</option>
+                ))}
+              </select>
+            </div>
+
             <button
               type="button"
               id="btn-store-selected"
-              className="btn btn-primary w-full justify-center"
+              className="btn btn-primary w-full justify-center h-10"
               onClick={handleStore}
               disabled={checked.size === 0 || storing}
             >

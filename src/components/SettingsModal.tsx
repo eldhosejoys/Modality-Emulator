@@ -24,7 +24,7 @@ export default function SettingsModal({ isOpen, onClose, settings, onSave, addLo
       onClick={onClose}
     >
       <div 
-        className="glass-card w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border-white/10"
+        className="glass-card w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border-white/10"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

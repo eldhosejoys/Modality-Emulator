@@ -310,8 +310,16 @@ router.post('/start', async (req, res) => {
         try {
           const settings = readSettings();
           let target = null;
-          if (settings.pacs && settings.pacs.aeTitle === moveDestination) target = settings.pacs;
-          else if (settings.ris && settings.ris.aeTitle === moveDestination) target = settings.ris;
+          
+          // Search in RIS array
+          if (settings.ris && Array.isArray(settings.ris)) {
+            target = settings.ris.find(r => r.aeTitle === moveDestination);
+          }
+          
+          // Search in PACS array
+          if (!target && settings.pacs && Array.isArray(settings.pacs)) {
+            target = settings.pacs.find(p => p.aeTitle === moveDestination);
+          }
           
           if (!target) {
             const msg = `C-MOVE Error: Unknown destination AE Title "${moveDestination}". Please add it to your PACS/RIS settings.`;

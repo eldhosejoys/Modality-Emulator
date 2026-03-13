@@ -15,8 +15,10 @@ function readSettings() {
   } catch {
     return {
       emulator: { systemName: 'Modality', aeTitle: 'MODALITY', listenPort: 104 },
-      ris: { ipAddress: '127.0.0.1', port: 4242, aeTitle: 'ORTHANC' },
-      pacs: { ipAddress: '127.0.0.1', port: 4242, aeTitle: 'ORTHANC' },
+      ris: [{ id: 'default-ris', name: 'RIS', ipAddress: '127.0.0.1', port: 4242, aeTitle: 'ORTHANC' }],
+      pacs: [{ id: 'default-pacs', name: 'PACS', ipAddress: '127.0.0.1', port: 4242, aeTitle: 'ORTHANC' }],
+      selectedRisId: 'default-ris',
+      selectedPacsId: 'default-pacs'
     };
   }
 }
