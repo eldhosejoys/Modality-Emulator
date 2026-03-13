@@ -35,7 +35,7 @@ export default function EmulatorConfigTab({ settings, onSave, addLog }: Props) {
             <label className="block text-xs font-medium text-text-muted mb-1.5">System Name</label>
             <input
               id="emu-system-name"
-              className="input"
+              className="input h-8"
               value={config.systemName}
               onChange={(e) => setConfig({ ...config, systemName: e.target.value })}
               placeholder="Modality"
@@ -45,7 +45,7 @@ export default function EmulatorConfigTab({ settings, onSave, addLog }: Props) {
             <label className="block text-xs font-medium text-text-muted mb-1.5">AE Title</label>
             <input
               id="emu-ae-title"
-              className="input"
+              className="input h-8"
               value={config.aeTitle}
               onChange={(e) => setConfig({ ...config, aeTitle: e.target.value })}
               placeholder="MODALITY"
@@ -56,7 +56,7 @@ export default function EmulatorConfigTab({ settings, onSave, addLog }: Props) {
             <label className="block text-xs font-medium text-text-muted mb-1.5">Listen Port</label>
             <input
               id="emu-listen-port"
-              className="input"
+              className="input h-8"
               type="number"
               value={config.listenPort}
               onChange={(e) => setConfig({ ...config, listenPort: parseInt(e.target.value) || 0 })}

@@ -24,7 +24,7 @@ export default function SettingsModal({ isOpen, onClose, settings, onSave, addLo
       onClick={onClose}
     >
       <div 
-        className="glass-card w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border-white/10"
+        className="glass-card w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border-white/10"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -44,7 +44,7 @@ export default function SettingsModal({ isOpen, onClose, settings, onSave, addLo
 
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar Tabs */}
-          <div className="w-64 border-r border-white/10 bg-black/20 p-4 space-y-2">
+          <div className="w-52 border-r border-white/10 bg-black/20 p-4 space-y-2">
             <button
               type="button"
               onClick={() => setActiveTab('remote')}

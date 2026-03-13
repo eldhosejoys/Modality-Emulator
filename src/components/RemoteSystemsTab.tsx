@@ -41,14 +41,14 @@ const SystemList = ({ type, list, selectedId, onSelect, onAdd, onRemove, onUpdat
       ) : (
         list.map((s) => (
           <div key={s.id} className="p-4 group hover:bg-white/[0.02] transition-colors">
-            <div className="grid grid-cols-1 sm:grid-cols-[48px_1.2fr_1.2fr_80px_1fr] gap-x-4 gap-y-4 items-end">
+            <div className="grid grid-cols-1 sm:grid-cols-[48px_0.8fr_1.1fr_80px_1.5fr] gap-x-3 gap-y-3 items-end">
               <div className="flex flex-col items-center">
-                <label className="block text-[8px] font-bold text-text-muted uppercase mb-2.5 opacity-60 text-center">Default</label>
-                <div className="h-9 flex items-center justify-center">
+                <label className="block text-[7px] font-bold text-text-muted uppercase mb-2 opacity-60 text-center">Default</label>
+                <div className="h-8 flex items-center justify-center">
                   <button
                     type="button"
                     onClick={() => onSelect(s.id)}
-                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${selectedId === s.id ? 'border-accent bg-accent' : 'border-border hover:border-accent/50'}`}
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${selectedId === s.id ? 'border-accent bg-accent' : 'border-border hover:border-accent/50'}`}
                   >
                     {selectedId === s.id && <div className="w-1.5 h-1.5 rounded-full bg-white shadow-sm" />}
                   </button>
@@ -56,27 +56,27 @@ const SystemList = ({ type, list, selectedId, onSelect, onAdd, onRemove, onUpdat
               </div>
 
               <div>
-                <label className="block text-[9px] font-bold text-text-muted uppercase tracking-wider mb-1.5 opacity-70">Friendly Name</label>
+                <label className="block text-[8px] font-bold text-text-muted uppercase tracking-wider mb-1 opacity-70">Friendly Name</label>
                 <input
-                  className="input h-9"
+                  className="input h-8 py-1.5 text-xs"
                   value={s.name}
                   onChange={(e) => onUpdate(type, s.id, { name: e.target.value })}
                   placeholder="e.g. Main Archive"
                 />
               </div>
               <div>
-                <label className="block text-[9px] font-bold text-text-muted uppercase tracking-wider mb-1.5 opacity-70">IP Address</label>
+                <label className="block text-[8px] font-bold text-text-muted uppercase tracking-wider mb-1 opacity-70">IP Address</label>
                 <input
-                  className="input h-9"
+                  className="input h-8 py-1.5 text-xs"
                   value={s.ipAddress}
                   onChange={(e) => onUpdate(type, s.id, { ipAddress: e.target.value })}
                   placeholder="127.0.0.1"
                 />
               </div>
               <div>
-                <label className="block text-[9px] font-bold text-text-muted uppercase tracking-wider mb-1.5 opacity-70">Port</label>
+                <label className="block text-[8px] font-bold text-text-muted uppercase tracking-wider mb-1 opacity-70">Port</label>
                 <input
-                  className="input h-9"
+                  className="input h-8 py-1.5 text-xs"
                   type="number"
                   value={s.port}
                   onChange={(e) => onUpdate(type, s.id, { port: parseInt(e.target.value) || 0 })}
@@ -84,21 +84,21 @@ const SystemList = ({ type, list, selectedId, onSelect, onAdd, onRemove, onUpdat
                 />
               </div>
               <div>
-                <label className="block text-[9px] font-bold text-text-muted uppercase tracking-wider mb-1.5 opacity-70">AE Title</label>
+                <label className="block text-[8px] font-bold text-text-muted uppercase tracking-wider mb-1 opacity-70">AE Title</label>
                 <div className="flex gap-2">
                   <input
-                    className="input flex-1 h-9"
+                    className="input flex-1 h-8 py-1.5 text-xs"
                     value={s.aeTitle}
                     onChange={(e) => onUpdate(type, s.id, { aeTitle: e.target.value })}
                     placeholder="ORTHANC"
                   />
                   <button
                     type="button"
-                    className="h-9 w-9 flex-shrink-0 flex items-center justify-center text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors border border-border/30"
+                    className="h-8 w-8 flex-shrink-0 flex items-center justify-center text-text-muted hover:text-danger hover:bg-danger/10 rounded-lg transition-colors border border-border/30"
                     onClick={() => onRemove(type, s.id)}
                     title={`Remove ${type.toUpperCase()}`}
                   >
-                    <FiTrash2 size={14} />
+                    <FiTrash2 size={12} />
                   </button>
                 </div>
               </div>
