@@ -47,8 +47,6 @@ async function getStoredImagesDatasets() {
       const dicomDict = DicomMessage.readFile(arrayBuffer, { ignoreErrors: true });
       const dataset = DicomMetaDictionary.naturalizeDataset(dicomDict.dict);
       
-      // Add a reference to the filename for internal tracking if needed
-      dataset._filename = file;
       datasets.push(dataset);
     } catch (e) {
       console.warn(`Failed to parse ${file} for C-FIND:`, e.message);
@@ -60,24 +58,48 @@ async function getStoredImagesDatasets() {
 // Helper: Basic DICOM matching logic
 function matchesQuery(query, record) {
   // DICOM Matching rules: 
-  // - Empty strings in query match everything (universal match)
+  // - Empty strings or empty arrays in query match everything (universal match)
   // - * or ? are wildcards
   // - Otherwise exact match
   
+  const tagsToIgnore = ['QueryRetrieveLevel', 'SpecificCharacterSet', 'Priority', '_vrMap'];
+
+  // Inner helper to get a comparable string from DICOM values (handles Alphabetic objects, etc.)
+  function toFlatString(val) {
+    if (val === null || val === undefined) return '';
+    if (Array.isArray(val)) {
+      if (val.length === 0) return '';
+      return toFlatString(val[0]);
+    }
+    if (typeof val === 'object') {
+      // Common DICOM naturalized object structure for names
+      return toFlatString(val.Alphabetic || val.Ideographic || val.Phonetic || '');
+    }
+    return String(val);
+  }
+
   for (const key in query) {
-    if (key.startsWith('_')) continue;
+    if (key.startsWith('_') || tagsToIgnore.includes(key)) continue;
     
     let qVal = query[key];
     let rVal = record[key];
     
-    // If query value is null or empty, it's a universal match for this field
-    if (qVal === null || qVal === undefined || qVal === '' || qVal === '*') continue;
+    // Check for universal match: null, undefined, '', '*', or empty array []
+    const isUniversalMatch = (
+      qVal === null || 
+      qVal === undefined || 
+      qVal === '' || 
+      qVal === '*' || 
+      (Array.isArray(qVal) && qVal.length === 0)
+    );
+
+    if (isUniversalMatch) continue;
     
     // If record doesn't have the field but query asks for a specific value, it's NOT a match
     if (rVal === undefined || rVal === null) return false;
     
-    const qStr = String(qVal).toLowerCase();
-    const rStr = String(rVal).toLowerCase();
+    const qStr = toFlatString(qVal).toLowerCase();
+    const rStr = toFlatString(rVal).toLowerCase();
     
     // Wildcard matching (simple version)
     if (qStr.includes('*')) {
@@ -190,18 +212,27 @@ router.post('/start', async (req, res) => {
           
           addScpLog(`C-FIND: Found ${matches.length} matching studies for ${callingAet}`, matches.length > 0 ? 'success' : 'info');
 
+          const responses = [];
           // Send back each match
           matches.forEach(match => {
             const response = CFindResponse.fromRequest(request);
-            response.setDataset(new Dataset(match));
+            // Clean match of any internal properties starting with _
+            const cleanMatch = {};
+            for (const key in match) {
+              if (!key.startsWith('_')) cleanMatch[key] = match[key];
+            }
+            response.setDataset(new Dataset(cleanMatch));
             response.setStatus(0xFF00); // Pending
-            callback(response);
+            responses.push(response);
           });
 
           // Final response
           const finalResponse = CFindResponse.fromRequest(request);
           finalResponse.setStatus(0x0000); // Success
-          callback(finalResponse);
+          responses.push(finalResponse);
+
+          // Call callback once with all pooled responses
+          callback(responses);
         } catch (err) {
           console.error('C-FIND Error:', err);
           addScpLog(`C-FIND Error: ${err.message}`, 'error');
