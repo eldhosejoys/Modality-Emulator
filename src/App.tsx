@@ -226,6 +226,7 @@ export default function App() {
               emulatorStatus={emulatorStatus}
               setEmulatorStatus={setEmulatorStatus}
               addLog={addLog}
+              onUpdateSettings={handleSaveSettings}
             />
           )}
           {activeTab === 'worklist' && settings && (
