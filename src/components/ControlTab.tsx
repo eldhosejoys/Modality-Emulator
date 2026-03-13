@@ -13,6 +13,9 @@ interface Props {
 export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus, addLog }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
 
+  const ris = settings.ris.find(r => r.id === settings.selectedRisId) || settings.ris[0];
+  const pacs = settings.pacs.find(p => p.id === settings.selectedPacsId) || settings.pacs[0];
+
   const handleAction = async (actionName: string, fn: () => Promise<unknown>) => {
     setBusy(actionName);
     addLog(`${actionName}...`, 'info');
@@ -99,12 +102,16 @@ export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus
               </div>
               <div>
                 <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider">RIS Connection</h3>
-                <span className="text-[10px] font-mono text-text-muted mt-0.5 block">{settings.ris.ipAddress}:{settings.ris.port}</span>
+                <span className="text-[10px] font-mono text-text-muted mt-0.5 block">
+                  {ris ? `${ris.ipAddress}:${ris.port}` : 'None Configured'}
+                </span>
               </div>
             </div>
-            <div className="text-[10px] bg-bg-secondary px-2 py-0.5 rounded border border-border text-text-muted font-bold tracking-tighter self-start">
-              AET: {settings.ris.aeTitle}
-            </div>
+            {ris && (
+              <div className="text-[10px] bg-bg-secondary px-2 py-0.5 rounded border border-border text-text-muted font-bold tracking-tighter self-start">
+                AET: {ris.aeTitle}
+              </div>
+            )}
           </div>
           
           <p className="text-xs text-text-secondary leading-relaxed mb-8">
@@ -117,7 +124,7 @@ export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus
               id="btn-ping-ris"
               className="btn btn-outline flex-1 justify-center py-2 h-9 text-[11px] font-bold"
               onClick={() => handleAction('Ping RIS', () => api.pingHost('ris'))}
-              disabled={busy !== null}
+              disabled={busy !== null || !ris}
             >
               <FiWifi className="text-accent" /> {busy === 'Ping RIS' ? 'Connecting...' : 'PING HOST'}
             </button>
@@ -126,7 +133,7 @@ export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus
               id="btn-echo-ris"
               className="btn btn-outline flex-1 justify-center py-2 h-9 text-[11px] font-bold"
               onClick={() => handleAction('DICOM Echo (RIS)', () => api.dicomEcho('ris'))}
-              disabled={busy !== null}
+              disabled={busy !== null || !ris}
             >
               <FiActivity className="text-accent" /> {busy === 'DICOM Echo (RIS)' ? 'Echoing...' : 'C-ECHO'}
             </button>
@@ -142,12 +149,16 @@ export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus
               </div>
               <div>
                 <h3 className="text-sm font-bold text-text-primary uppercase tracking-wider">PACS Storage</h3>
-                <span className="text-[10px] font-mono text-text-muted mt-0.5 block">{settings.pacs.ipAddress}:{settings.pacs.port}</span>
+                <span className="text-[10px] font-mono text-text-muted mt-0.5 block">
+                  {pacs ? `${pacs.ipAddress}:${pacs.port}` : 'None Configured'}
+                </span>
               </div>
             </div>
-            <div className="text-[10px] bg-bg-secondary px-2 py-0.5 rounded border border-border text-text-muted font-bold tracking-tighter self-start">
-              AET: {settings.pacs.aeTitle}
-            </div>
+            {pacs && (
+              <div className="text-[10px] bg-bg-secondary px-2 py-0.5 rounded border border-border text-text-muted font-bold tracking-tighter self-start">
+                AET: {pacs.aeTitle}
+              </div>
+            )}
           </div>
           
           <p className="text-xs text-text-secondary leading-relaxed mb-8">
@@ -160,7 +171,7 @@ export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus
               id="btn-ping-pacs"
               className="btn btn-outline flex-1 justify-center py-2 h-9 text-[11px] font-bold"
               onClick={() => handleAction('Ping PACS', () => api.pingHost('pacs'))}
-              disabled={busy !== null}
+              disabled={busy !== null || !pacs}
             >
               <FiWifi className="text-accent" /> {busy === 'Ping PACS' ? 'Connecting...' : 'PING HOST'}
             </button>
@@ -169,7 +180,7 @@ export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus
               id="btn-echo-pacs"
               className="btn btn-outline flex-1 justify-center py-2 h-9 text-[11px] font-bold"
               onClick={() => handleAction('DICOM Echo (PACS)', () => api.dicomEcho('pacs'))}
-              disabled={busy !== null}
+              disabled={busy !== null || !pacs}
             >
               <FiActivity className="text-accent" /> {busy === 'DICOM Echo (PACS)' ? 'Echoing...' : 'C-ECHO'}
             </button>
