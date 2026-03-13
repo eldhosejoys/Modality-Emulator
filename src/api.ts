@@ -2,8 +2,11 @@ const API_BASE = '/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers: { 
+      'Content-Type': 'application/json',
+      ...options?.headers 
+    },
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
@@ -86,8 +89,12 @@ export interface WorklistQuery {
   [key: string]: any;
 }
 
-export const requestWorklist = (query: WorklistQuery = {}, targetRisId?: string) =>
-  request<DicomResult>('/dicom/worklist', { method: 'POST', body: JSON.stringify({ query, targetRisId }) });
+export const requestWorklist = (query: WorklistQuery = {}, targetRisId?: string, signal?: AbortSignal) =>
+  request<DicomResult>('/dicom/worklist', { 
+    method: 'POST', 
+    body: JSON.stringify({ query, targetRisId }),
+    signal 
+  });
 
 export const storeImages = (filenames: string[], targetPacsId?: string, worklistData?: any, fileOverrides?: Record<string, any>) =>
   request<DicomResult>('/dicom/store', { method: 'POST', body: JSON.stringify({ filenames, targetPacsId, worklistData, fileOverrides }) });

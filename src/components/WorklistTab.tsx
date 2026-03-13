@@ -53,6 +53,16 @@ export default function WorklistTab({
   const [targetRisId, setTargetRisId] = useState<string>(settings.selectedRisId || settings.ris[0]?.id || '');
   
   const fileInput = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const handleCancelQuery = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      addLog('Worklist query cancelled by user', 'warning');
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (settings.selectedRisId && !targetRisId) {
@@ -203,10 +213,15 @@ export default function WorklistTab({
     setEditingIndex(null);
   };
   const handleLiveQuery = async (query: api.WorklistQuery) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
     setLoading(true);
     setQueryResults([]);
     try {
-      const result = await api.requestWorklist(query, targetRisId);
+      const result = await api.requestWorklist(query, targetRisId, abortControllerRef.current.signal);
       if (result.success) {
         setQueryResults(result.data as any[] || []);
         addLog(`Worklist query successful: Found ${result.data ? (result.data as any[]).length : 0} results`, 'success');
@@ -216,10 +231,15 @@ export default function WorklistTab({
         addLog(`Worklist query failed: ${result.message}`, 'error');
       }
     } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        // Already handled in handleCancelQuery or by new query
+        return;
+      }
       const msg = err instanceof Error ? err.message : 'Unknown error';
       addLog(`Worklist query failed: ${msg}`, 'error');
     } finally {
       setLoading(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -268,6 +288,7 @@ export default function WorklistTab({
               onQuery={handleLiveQuery} 
               onClear={() => { setQueryResults([]); setExternalQuery(null); }}
               isLoading={loading && viewMode === 'live'} 
+              onCancel={handleCancelQuery}
               externalQuery={externalQuery}
               query={query}
               setQuery={setQuery}
@@ -377,9 +398,21 @@ export default function WorklistTab({
           
           <div className="flex-1 overflow-auto">
             {loading ? (
-              <div className="flex flex-col items-center justify-center h-full gap-3">
-                <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-                <p className="text-sm text-text-muted">Processing request...</p>
+              <div className="flex flex-col items-center justify-center h-full gap-4">
+                <div className="w-10 h-10 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                <div className="text-center">
+                  <p className="text-sm font-medium text-text-primary">Executing Query...</p>
+                  <p className="text-xs text-text-muted mt-1">This may take a few seconds depending on the RIS response.</p>
+                </div>
+                {viewMode === 'live' && (
+                  <button 
+                    type="button"
+                    onClick={handleCancelQuery}
+                    className="mt-2 px-4 py-2 bg-danger/10 text-danger hover:bg-danger hover:text-white rounded-lg text-xs font-bold transition-all border border-danger/20"
+                  >
+                    CANCEL SEARCH
+                  </button>
+                )}
               </div>
             ) : viewMode === 'live' ? (
               queryResults.length > 0 ? (

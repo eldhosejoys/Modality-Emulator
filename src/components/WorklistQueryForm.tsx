@@ -6,6 +6,7 @@ interface Props {
   onQuery: (query: api.WorklistQuery) => void;
   onClear: () => void;
   isLoading: boolean;
+  onCancel?: () => void;
   externalQuery?: api.WorklistQuery | null;
   query: api.WorklistQuery;
   setQuery: React.Dispatch<React.SetStateAction<api.WorklistQuery>>;
@@ -17,6 +18,7 @@ export default function WorklistQueryForm({
   onQuery, 
   onClear, 
   isLoading, 
+  onCancel,
   externalQuery,
   query,
   setQuery,
@@ -167,7 +169,16 @@ export default function WorklistQueryForm({
         </div>
       )}
 
-      <div className="pt-4 flex justify-end">
+      <div className="pt-4 flex justify-end gap-3">
+        {isLoading && onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="btn bg-danger/10 text-danger hover:bg-danger hover:text-white px-6 transition-all border border-danger/20"
+          >
+            CANCEL
+          </button>
+        )}
         <button
           type="submit"
           disabled={isLoading}

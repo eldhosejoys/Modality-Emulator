@@ -61,7 +61,7 @@ export default function ControlTab({ settings, emulatorStatus, setEmulatorStatus
               <h2 className="text-lg font-bold text-text-primary tracking-tight">Modality Engine</h2>
               <p className="text-xs text-text-muted mt-0.5 font-medium uppercase tracking-widest">
                 {emulatorStatus.running 
-                  ? `Active • ${settings.emulator.aeTitle} @ Port ${emulatorStatus.port}` 
+                  ? `Active • ${emulatorStatus.aeTitle || settings.emulator.aeTitle} @ Port ${emulatorStatus.port}` 
                   : 'Engine Standby'}
               </p>
             </div>

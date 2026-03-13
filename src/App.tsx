@@ -142,9 +142,31 @@ export default function App() {
 
   const handleSaveSettings = async (newSettings: api.Settings) => {
     try {
+      const oldSettings = settings;
       const saved = await api.saveSettings(newSettings);
       setSettings(saved);
       addLog('Settings saved successfully', 'success');
+
+      // Detect if critical emulator settings changed while running
+      const needsRestart = emulatorStatus.running && oldSettings && (
+        oldSettings.emulator.aeTitle !== newSettings.emulator.aeTitle ||
+        oldSettings.emulator.listenPort !== newSettings.emulator.listenPort
+      );
+
+      if (needsRestart) {
+        addLog('Restarting emulator to apply new configuration...', 'info');
+        try {
+          await api.stopEmulator();
+          const newStatus = await api.startEmulator();
+          setEmulatorStatus(newStatus);
+          addLog(`Emulator restarted on port ${newStatus.port} (AE: ${newStatus.aeTitle})`, 'success');
+        } catch (err: any) {
+          addLog(`Auto-restart failed: ${err.message}. Please try starting manually.`, 'error');
+          // Sync status in case it's in a weird state
+          const status = await api.getEmulatorStatus();
+          setEmulatorStatus(status);
+        }
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       addLog(`Failed to save settings: ${msg}`, 'error');
@@ -185,7 +207,7 @@ export default function App() {
             <div className="flex items-center gap-2 pr-4 border-r border-border">
               <div className={`w-2 h-2 rounded-full ${emulatorStatus.running ? 'bg-success pulse-dot' : 'bg-danger'}`} />
               <span className="text-xs font-medium text-text-secondary">
-                {emulatorStatus.running ? `Running on port ${emulatorStatus.port}` : 'Stopped'}
+                {emulatorStatus.running ? `Running on port ${emulatorStatus.port} (AE: ${emulatorStatus.aeTitle})` : 'Stopped'}
               </span>
             </div>
             <button
