@@ -169,8 +169,8 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen">
       {/* Header */}
-      <header className="flex-shrink-0 border-b border-border px-6 py-3"
-        style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.08), rgba(16,185,129,0.04))' }}>
+      <header className="flex-shrink-0 border-b border-border px-6 py-3 header-bg">
+
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center"
             style={{ background: 'linear-gradient(135deg, var(--color-accent), var(--color-accent-light))' }}>
@@ -201,8 +201,8 @@ export default function App() {
       </header>
 
       {/* Tabs */}
-      <nav className="flex-shrink-0 flex border-b border-border overflow-x-auto px-4"
-        style={{ background: 'rgba(17,24,39,0.5)' }}>
+      <nav className="flex-shrink-0 flex border-b border-border overflow-x-auto px-4 tabs-bg">
+
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -262,8 +262,8 @@ export default function App() {
         </main>
 
         {/* Activity Log sidebar */}
-        <aside className="w-80 flex-shrink-0 border-l border-border flex flex-col"
-          style={{ background: 'rgba(10,14,26,0.6)' }}>
+        <aside className="w-80 flex-shrink-0 border-l border-border flex flex-col sidebar-bg">
+
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <h2 className="section-header mb-0">Activity Log</h2>
             {logs.length > 0 && (

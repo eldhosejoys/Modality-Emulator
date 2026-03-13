@@ -233,8 +233,9 @@ export default function WorklistTab({
       <div className="glass-card flex flex-col min-h-0 overflow-hidden transition-all duration-300">
         <div 
           className="p-4 border-b border-border flex items-center justify-between cursor-pointer hover:bg-bg-secondary/50 group"
+          onClick={() => togglePanel('query')}
         >
-          <div className="flex items-center gap-6" onClick={() => togglePanel('query')}>
+          <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
               <FiDatabase className="text-accent" />
               <h2 className="text-sm font-semibold text-text-primary">Live RIS Worklist Query</h2>
@@ -255,7 +256,7 @@ export default function WorklistTab({
               </select>
             </div>
           </div>
-          <div className="flex items-center gap-2" onClick={() => togglePanel('query')}>
+          <div className="flex items-center gap-2">
             {!panelStates.query && <span className="text-[10px] text-text-muted px-2 py-0.5 rounded-full bg-bg-secondary">Collapsed</span>}
             {panelStates.query ? <FiChevronUp className="text-text-muted group-hover:text-accent" /> : <FiChevronDown className="text-text-muted group-hover:text-accent" />}
           </div>
