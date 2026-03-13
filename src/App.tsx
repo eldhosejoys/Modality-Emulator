@@ -122,7 +122,7 @@ export default function App() {
             })
           }));
 
-          return [...formattedNewLogs, ...prev].slice(0, 200);
+          return [...formattedNewLogs.reverse(), ...prev].slice(0, 200);
         });
       } catch (err) {
         console.error('Failed to fetch server logs:', err);
