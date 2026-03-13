@@ -32,6 +32,8 @@ desktop.ini
 
 # Server uploads/
 server/data/
+server/data/settings.json
+
 
 # TypeScript cache
 *.tsbuildinfo

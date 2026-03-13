@@ -30,29 +30,80 @@ function addScpLog(message, type = 'info') {
   return logEntry;
 }
 
-// Helper: Get all image datasets from local storage
-async function getStoredImagesDatasets() {
+// Helper: Get all image datasets and paths from local storage
+async function getStoredImages() {
   if (!fs.existsSync(IMAGES_DIR)) return [];
   
   const dcmjs = await import('dcmjs');
   const { DicomMessage, DicomMetaDictionary } = dcmjs.data;
-  const datasets = [];
+  const results = [];
   
   const files = fs.readdirSync(IMAGES_DIR).filter(f => f.toLowerCase().endsWith('.dcm'));
   
   for (const file of files) {
     try {
-      const buffer = fs.readFileSync(join(IMAGES_DIR, file));
+      const filePath = join(IMAGES_DIR, file);
+      const buffer = fs.readFileSync(filePath);
       const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
       const dicomDict = DicomMessage.readFile(arrayBuffer, { ignoreErrors: true });
       const dataset = DicomMetaDictionary.naturalizeDataset(dicomDict.dict);
       
-      datasets.push(dataset);
+      results.push({ dataset, filePath });
     } catch (e) {
-      console.warn(`Failed to parse ${file} for C-FIND:`, e.message);
+      console.warn(`Failed to parse ${file}:`, e.message);
     }
   }
-  return datasets;
+  return results;
+}
+
+// Helper: Get all image datasets from local storage
+async function getStoredImagesDatasets() {
+  const images = await getStoredImages();
+  return images.map(img => img.dataset);
+}
+
+// Helper: Internal function to perform C-STORE (SCU) for C-MOVE sub-operations
+async function internalStore(host, port, callingAeTitle, calledAeTitle, filePaths) {
+  const dimseModule = await import('dcmjs-dimse');
+  const dimse = dimseModule.default;
+  const { Client } = dimse;
+  const { CStoreRequest } = dimse.requests;
+
+  return new Promise((resolve) => {
+    const client = new Client();
+    let completed = 0;
+    let failed = 0;
+    let finished = 0;
+
+    if (filePaths.length === 0) {
+      resolve({ completed: 0, failed: 0 });
+      return;
+    }
+
+    const requests = filePaths.map((fp) => {
+      const request = new CStoreRequest(fp);
+      request.on('response', (response) => {
+        const status = response.getStatus();
+        if (status === 0x0000) completed++;
+        else failed++;
+        
+        finished++;
+        if (finished === filePaths.length) {
+          client.release();
+          resolve({ completed, failed });
+        }
+      });
+      return request;
+    });
+
+    client.on('networkError', (err) => {
+      console.error('Internal store network error:', err.message);
+      resolve({ completed, failed: filePaths.length - finished });
+    });
+
+    requests.forEach((req) => client.addRequest(req));
+    client.send(host, port, callingAeTitle, calledAeTitle);
+  });
 }
 
 // Helper: Basic DICOM matching logic
@@ -139,7 +190,7 @@ router.post('/start', async (req, res) => {
     const dimseModule = await import('dcmjs-dimse');
     const dimse = dimseModule.default;
     const { Server, Dataset } = dimse;
-    const { CEchoResponse, CFindResponse } = dimse.responses;
+    const { CEchoResponse, CFindResponse, CMoveResponse } = dimse.responses;
 
     class ModalityScp extends dimse.Scp {
       constructor(socket, opts) {
@@ -165,6 +216,8 @@ router.post('/start', async (req, res) => {
             '1.2.840.10008.5.1.4.31', // Modality Worklist
             '1.2.840.10008.5.1.4.1.2.1.1', // Patient Root Query/Retrieve - FIND
             '1.2.840.10008.5.1.4.1.2.2.1', // Study Root Query/Retrieve - FIND
+            '1.2.840.10008.5.1.4.1.2.1.2', // Patient Root Query/Retrieve - MOVE
+            '1.2.840.10008.5.1.4.1.2.2.2', // Study Root Query/Retrieve - MOVE
           ];
 
           if (allowedSyntaxes.includes(abstractSyntax)) {
@@ -239,6 +292,114 @@ router.post('/start', async (req, res) => {
           const errResponse = CFindResponse.fromRequest(request);
           errResponse.setStatus(0xC001); // Unable to process
           callback(errResponse);
+        }
+      }
+
+      async cMoveRequest(request, callback) {
+        const callingAet = this.association ? this.association.getCallingAeTitle() : 'Unknown';
+        
+        // C-MOVE destination is in the Command Dataset
+        const cmdElements = request.getCommandDataset().getElements();
+        const moveDestination = cmdElements.MoveDestination || cmdElements['00000600'];
+        
+        const query = request.getDataset().getElements();
+        
+        addScpLog(`Received C-MOVE request from ${callingAet} to destination ${moveDestination}`, 'info');
+        console.log(`  📦 C-MOVE from ${callingAet} to ${moveDestination}. Query:`, JSON.stringify(query, null, 2));
+
+        try {
+          const settings = readSettings();
+          let target = null;
+          if (settings.pacs && settings.pacs.aeTitle === moveDestination) target = settings.pacs;
+          else if (settings.ris && settings.ris.aeTitle === moveDestination) target = settings.ris;
+          
+          if (!target) {
+            const msg = `C-MOVE Error: Unknown destination AE Title "${moveDestination}". Please add it to your PACS/RIS settings.`;
+            addScpLog(msg, 'error');
+            console.warn(`  ⚠️ ${msg}`);
+            const errResponse = CMoveResponse.fromRequest(request);
+            errResponse.setStatus(0xA801); // Move destination unknown
+            callback(errResponse);
+            return;
+          }
+
+          // Get matching images with paths
+          const allImages = await getStoredImages();
+          const matches = allImages.filter(img => matchesQuery(query, img.dataset));
+          
+          addScpLog(`C-MOVE: Found ${matches.length} matching images for ${callingAet}`, matches.length > 0 ? 'success' : 'info');
+
+          if (matches.length === 0) {
+            const finalResponse = CMoveResponse.fromRequest(request);
+            finalResponse.setStatus(0x0000); // Success (0 matches)
+            finalResponse.final = true; // Mark as final for the library dispatcher
+            callback(finalResponse);
+            return;
+          }
+          // Process C-STORE sub-operations
+          let completed = 0;
+          let failed = 0;
+          const responses = [];
+
+          for (let i = 0; i < matches.length; i++) {
+            const match = matches[i];
+            const results = await internalStore(
+              target.ipAddress, 
+              target.port, 
+              settings.emulator.aeTitle, 
+              moveDestination, 
+              [match.filePath]
+            );
+
+            completed += results.completed;
+            failed += results.failed;
+
+            // Add Pending response to the queue
+            const pendingResponse = CMoveResponse.fromRequest(request);
+            pendingResponse.setStatus(0xFF00); // Pending
+            const pCmd = pendingResponse.getCommandDataset();
+            
+            const remaining = matches.length - (i + 1);
+            pCmd.setElement('numberOfRemainingSuboperations', remaining);
+            pCmd.setElement('numberOfCompletedSuboperations', completed);
+            pCmd.setElement('numberOfFailedSuboperations', failed);
+            pCmd.setElement('numberOfWarningSuboperations', 0);
+            
+            // Manual tag settings for safety
+            const pElements = pCmd.getElements();
+            pElements['00001020'] = remaining;
+            pElements['00001021'] = completed;
+            pElements['00001022'] = failed;
+            pElements['00001023'] = 0;
+
+            responses.push(pendingResponse);
+          }
+
+          addScpLog(`C-MOVE complete: Sent ${completed} images, ${failed} failed`, failed === 0 ? 'success' : 'warning');
+
+          const finalResponse = CMoveResponse.fromRequest(request);
+          finalResponse.setStatus(failed > 0 ? 0xB000 : 0x0000); // Warning/Success
+          
+          const fCmd = finalResponse.getCommandDataset();
+          // Set tags using both raw hex and keywords to ensure library handles it correctly
+          const setElem = (tag, keyword, val) => {
+            try { fCmd.setElement(tag, val); } catch (e) {}
+            try { fCmd.setElement(keyword, val); } catch (e) {}
+          };
+          setElem('00001020', 'NumberOfRemainingSuboperations', 0);
+          setElem('00001021', 'NumberOfCompletedSuboperations', completed);
+          setElem('00001022', 'NumberOfFailedSuboperations', failed);
+          setElem('00001023', 'NumberOfWarningSuboperations', 0);
+          
+          console.log(`  ✅ C-MOVE: Sending final response. Status: 0x${finalResponse.getStatus().toString(16).toUpperCase()}. Elements:`, JSON.stringify(fCmd.getElements()));
+          
+          callback([finalResponse]);
+        } catch (err) {
+          console.error('C-MOVE Error:', err);
+          addScpLog(`C-MOVE Error: ${err.message}`, 'error');
+          const errResponse = CMoveResponse.fromRequest(request);
+          errResponse.setStatus(0xC001); // Unable to process
+          callback([errResponse]);
         }
       }
 
