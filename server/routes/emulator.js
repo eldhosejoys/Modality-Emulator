@@ -38,7 +38,10 @@ async function getStoredImages() {
   const { DicomMessage, DicomMetaDictionary } = dcmjs.data;
   const results = [];
   
-  const files = fs.readdirSync(IMAGES_DIR).filter(f => f.toLowerCase().endsWith('.dcm'));
+  const files = fs.readdirSync(IMAGES_DIR).filter(f => {
+    const filePath = join(IMAGES_DIR, f);
+    return fs.statSync(filePath).isFile() && !f.startsWith('.');
+  });
   
   for (const file of files) {
     try {
@@ -108,34 +111,49 @@ async function internalStore(host, port, callingAeTitle, calledAeTitle, filePath
 
 // Helper: Basic DICOM matching logic
 function matchesQuery(query, record) {
-  // DICOM Matching rules: 
-  // - Empty strings or empty arrays in query match everything (universal match)
-  // - * or ? are wildcards
-  // - Otherwise exact match
-  
   const tagsToIgnore = ['QueryRetrieveLevel', 'SpecificCharacterSet', 'Priority', '_vrMap'];
 
-  // Inner helper to get a comparable string from DICOM values (handles Alphabetic objects, etc.)
-  function toFlatString(val) {
-    if (val === null || val === undefined) return '';
+  // Inner helper to get a list of comparable strings from DICOM values (handles arrays, multi-valued strings, and objects)
+  function normalize(val) {
+    if (val === null || val === undefined) return [];
     if (Array.isArray(val)) {
-      if (val.length === 0) return '';
-      return toFlatString(val[0]);
+      return val.map(v => normalize(v)).flat();
     }
     if (typeof val === 'object') {
       // Common DICOM naturalized object structure for names
-      return toFlatString(val.Alphabetic || val.Ideographic || val.Phonetic || '');
+      return [String(val.Alphabetic || val.Ideographic || val.Phonetic || '').toLowerCase()];
     }
-    return String(val);
+    const str = String(val).toLowerCase();
+    // Multi-valued DICOM strings are separated by backslash
+    if (str.includes('\\')) {
+      return str.split('\\').map(s => s.trim()).filter(s => s !== '');
+    }
+    return [str];
+  }
+
+  // Helper for DICOM wildcard matching
+  function isMatch(qStr, rStr) {
+    if (qStr === '' || qStr === '*' || qStr === undefined) return true;
+    
+    // DICOM wildcards: * (0 or more), ? (exactly 1)
+    if (qStr.includes('*') || qStr.includes('?')) {
+      const pattern = qStr
+        .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape regex chars
+        .replace(/\*/g, '.*')               // * -> .*
+        .replace(/\?/g, '.');               // ? -> .
+      const regex = new RegExp(`^${pattern}$`);
+      return regex.test(rStr);
+    }
+    return qStr === rStr;
   }
 
   for (const key in query) {
     if (key.startsWith('_') || tagsToIgnore.includes(key)) continue;
     
-    let qVal = query[key];
-    let rVal = record[key];
+    const qVal = query[key];
+    const rVal = record[key];
     
-    // Check for universal match: null, undefined, '', '*', or empty array []
+    // Universal match: null, undefined, '', '*', or empty array []
     const isUniversalMatch = (
       qVal === null || 
       qVal === undefined || 
@@ -146,33 +164,27 @@ function matchesQuery(query, record) {
 
     if (isUniversalMatch) continue;
     
+    const qList = normalize(qVal);
+    const rList = normalize(rVal);
+
+    if (qList.length === 0) continue;
+    
     // If record doesn't have the field but query asks for a specific value, it's NOT a match
-    if (rVal === undefined || rVal === null) return false;
+    if (rList.length === 0) return false;
     
-    const qStr = toFlatString(qVal).toLowerCase();
-    const rStr = toFlatString(rVal).toLowerCase();
-    
-    // Wildcard matching (simple version)
-    if (qStr.includes('*')) {
-      const parts = qStr.split('*').filter(p => p !== '');
-      if (parts.length === 0) continue; // Just 1 or more * fits anything
-      
-      // Check if all parts exist in sequence
-      let lastIndex = 0;
-      let allPartsMatch = true;
-      for (const part of parts) {
-        const foundIndex = rStr.indexOf(part, lastIndex);
-        if (foundIndex === -1) {
-          allPartsMatch = false;
+    // DICOM Matching for multi-valued: Match if ANY query value matches ANY record value
+    let found = false;
+    for (const qItem of qList) {
+      for (const rItem of rList) {
+        if (isMatch(qItem, rItem)) {
+          found = true;
           break;
         }
-        lastIndex = foundIndex + part.length;
       }
-      if (!allPartsMatch) return false;
-    } else {
-      // Exact match
-      if (qStr !== rStr) return false;
+      if (found) break;
     }
+
+    if (!found) return false;
   }
   return true;
 }
@@ -249,19 +261,35 @@ router.post('/start', async (req, res) => {
         try {
           // Get all images from our "Archive" (stored images folder)
           const allImages = await getStoredImagesDatasets();
-          
-          // Deduplicate images to studies if needed? For FIND at Study level, 
-          // usually we should return one response per study.
-          // For simplicity, we'll return one response per unique StudyInstanceUID found.
+
+          // Group images into studies and aggregate study-level tags (like ModalitiesInStudy)
           const studyMap = new Map();
           allImages.forEach(img => {
             const studyUid = img.StudyInstanceUID || 'unknown';
             if (!studyMap.has(studyUid)) {
-              studyMap.set(studyUid, img);
+              // Initialize study record with a copy of the first image's data
+              studyMap.set(studyUid, { ...img, ModalitiesInStudy: new Set() });
+            }
+            
+            const studyRecord = studyMap.get(studyUid);
+            // Aggregate all modalities found in this study
+            if (img.Modality) {
+              studyRecord.ModalitiesInStudy.add(img.Modality);
+            }
+            // Also handle cases where ModalitiesInStudy might already be a string/array in the file
+            if (img.ModalitiesInStudy) {
+              const currentMods = Array.isArray(img.ModalitiesInStudy) ? img.ModalitiesInStudy : [img.ModalitiesInStudy];
+              currentMods.forEach(m => studyRecord.ModalitiesInStudy.add(m));
             }
           });
 
-          const matches = Array.from(studyMap.values()).filter(img => matchesQuery(query, img));
+          // Convert Sets back to arrays for the matching logic and final output
+          const studyList = Array.from(studyMap.values()).map(s => {
+            s.ModalitiesInStudy = Array.from(s.ModalitiesInStudy);
+            return s;
+          });
+
+          const matches = studyList.filter(s => matchesQuery(query, s));
           
           addScpLog(`C-FIND: Found ${matches.length} matching studies for ${callingAet}`, matches.length > 0 ? 'success' : 'info');
 
