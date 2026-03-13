@@ -47,6 +47,8 @@ export const startEmulator = () =>
   request<EmulatorStatus>('/emulator/start', { method: 'POST' });
 export const stopEmulator = () =>
   request<EmulatorStatus>('/emulator/stop', { method: 'POST' });
+export const getEmulatorLogs = () => request<LogEntry[]>('/emulator/logs');
+export const clearEmulatorLogs = () => request<{ success: boolean }>('/emulator/logs', { method: 'DELETE' });
 
 // ─── DICOM Operations ───────────────────────
 export interface DicomResult {

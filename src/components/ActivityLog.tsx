@@ -3,7 +3,7 @@ import type { LogEntry } from '../App';
 
 interface Props {
   logs: LogEntry[];
-  onDelete: (id: number) => void;
+  onDelete: (id: number | string) => void;
 }
 
 export default function ActivityLog({ logs, onDelete }: Props) {

@@ -9,7 +9,7 @@ import { ToastContainer, ToastMessage } from './components/Toast';
 import * as api from './api';
 
 export interface LogEntry {
-  id: number;
+  id: number | string;
   timestamp: string;
   message: string;
   type: 'info' | 'success' | 'error';
@@ -80,9 +80,10 @@ export default function App() {
 
   const clearLogs = () => {
     setLogs([]);
+    api.clearEmulatorLogs().catch(console.error);
   };
 
-  const deleteLog = (id: number) => {
+  const deleteLog = (id: number | string) => {
     setLogs((prev) => prev.filter((log) => log.id !== id));
   };
 
@@ -98,6 +99,45 @@ export default function App() {
       })
       .finally(() => setLoading(false));
   }, [addLog]);
+
+  useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+
+    const pollLogs = async () => {
+      try {
+        const serverLogs = await api.getEmulatorLogs();
+        setLogs((prev) => {
+          // Merge server logs that aren't already in the local state
+          const newLogs = serverLogs.filter(sl => !prev.some(pl => pl.id === sl.id));
+          if (newLogs.length === 0) return prev;
+          
+          const formattedNewLogs = newLogs.map(log => ({
+            ...log,
+            timestamp: new Date(log.timestamp).toLocaleTimeString(undefined, {
+              hour: 'numeric',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: true
+            })
+          }));
+
+          return [...formattedNewLogs, ...prev].slice(0, 200);
+        });
+      } catch (err) {
+        console.error('Failed to fetch server logs:', err);
+      }
+    };
+
+    // Poll every 2 seconds when emulator is running
+    if (emulatorStatus.running) {
+      pollLogs(); // Run once immediately
+      intervalId = setInterval(pollLogs, 2000);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [emulatorStatus.running]);
 
   const handleSaveSettings = async (newSettings: api.Settings) => {
     try {
